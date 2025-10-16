@@ -1,0 +1,127 @@
+/* public/css/auth.css */
+
+.autobid-auth-container {
+    max-width: 500px;
+    margin: 2rem auto;
+    padding: 2rem;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+.autobid-auth-container h2,
+.autobid-auth-container h3 {
+    color: var(--primary);
+    margin-bottom: 1.5rem;
+    text-align: center;
+}
+
+.autobid-form-group {
+    margin-bottom: 1.2rem;
+}
+
+.autobid-form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: var(--dark);
+}
+
+.autobid-form-group input,
+.autobid-form-group textarea {
+    width: 100%;
+    padding: 0.8rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 1rem;
+    background: var(--light);
+    box-sizing: border-box;
+}
+
+.autobid-form-group textarea {
+    min-height: 100px;
+    resize: vertical;
+}
+
+.autobid-auth-button {
+    width: 100%;
+    padding: 0.9rem;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition);
+    font-size: 1.1rem;
+}
+
+.autobid-auth-button:hover {
+    background: var(--primary-dark);
+}
+
+.autobid-auth-button.logout {
+    background: var(--accent);
+}
+
+.autobid-auth-button.logout:hover {
+    background: #c0392b; /* Un rojo más oscuro */
+}
+
+.autobid-auth-link {
+    text-align: center;
+    margin-top: 1rem;
+}
+
+.autobid-auth-link a {
+    color: var(--primary);
+    text-decoration: none;
+}
+
+.autobid-auth-link a:hover {
+    text-decoration: underline;
+}
+
+.autobid-auth-message {
+    padding: 0.8rem;
+    margin-bottom: 1rem;
+    border-radius: 6px;
+    text-align: center;
+    font-weight: 500;
+}
+
+.autobid-auth-message.error {
+    background: #ffebee;
+    color: #c62828;
+    border: 1px solid #ffcdd2;
+}
+
+.autobid-auth-message.success {
+    background: #e8f5e9;
+    color: #2e7d32;
+    border: 1px solid #c8e6c9;
+}
+
+.autobid-profile-info {
+    background: #f8f9fa;
+    padding: 1.5rem;
+    border-radius: 8px;
+    margin-bottom: 2rem;
+}
+
+.autobid-profile-info p {
+    margin: 0.5rem 0;
+}
+
+.autobid-logout-form {
+    margin-top: 1.5rem;
+    text-align: center;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+    .autobid-auth-container {
+        margin: 1rem;
+        padding: 1.5rem;
+    }
+}

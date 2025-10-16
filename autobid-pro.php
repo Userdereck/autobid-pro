@@ -12,11 +12,13 @@ require_once plugin_dir_path(__FILE__) . 'includes/class-post-types.php';
 require_once plugin_dir_path(__FILE__) . 'includes/class-api.php';
 require_once plugin_dir_path(__FILE__) . 'includes/class-auction-cron.php';
 require_once plugin_dir_path(__FILE__) . 'includes/class-shortcodes.php';
+require_once plugin_dir_path(__FILE__) . 'includes/class-auth.php';
 
 new AutoBid_Post_Types();
 new AutoBid_API();
 new AutoBid_Auction_Cron();
 new AutoBid_Shortcodes();
+new AutoBid_Auth();
 
 function autobid_create_required_pages() {
     // Ventas directas
@@ -183,10 +185,16 @@ function autobid_enqueue_frontend() {
     $sales_id = get_option('autobid_sales_page_id');
     $auctions_id = get_option('autobid_auctions_page_id');
     $detail_id = get_option('autobid_detail_page_id');
+    $login_id = get_option('autobid_login_page_id');
+    $register_id = get_option('autobid_register_page_id');
+    $profile_id = get_option('autobid_profile_page_id');
 
     $is_sales = is_page($sales_id);
     $is_auctions = is_page($auctions_id);
     $is_detail = is_page($detail_id);
+    $is_login = is_page($login_id);
+    $is_register = is_page($register_id);
+    $is_profile = is_page($profile_id);
 
     if (is_page() && !$is_sales && !$is_auctions && !$is_detail) {
         $post = get_post();
@@ -198,14 +206,30 @@ function autobid_enqueue_frontend() {
 
     if (!$is_sales && !$is_auctions && !$is_detail) return;
 
-    wp_enqueue_style('autobid-main', plugin_dir_url(__FILE__) . 'public/css/main.css', [], '1.5');
-    
+    wp_enqueue_style('autobid-main', plugin_dir_url(__FILE__) . 'public/css/main.css', [], '1.6');
+
+     if ($is_login || $is_register || $is_profile) {
+        wp_enqueue_style('autobid-auth', plugin_dir_url(__FILE__) . 'public/css/auth.css', [], '1.0');
+    }
     if ($is_sales || $is_auctions) {
         wp_enqueue_script('autobid-catalog', plugin_dir_url(__FILE__) . 'public/js/catalog.js', ['wp-i18n'], '1.5', true);
     }
     
     if ($is_detail) {
         wp_enqueue_script('autobid-detail', plugin_dir_url(__FILE__) . 'public/js/detail.js', ['wp-i18n'], '1.5', true);
+    }
+
+    if ($is_login || $is_register || $is_profile) {
+        $data = [
+            'api_url' => rest_url('autobid/v1/vehicles'),
+            'nonce' => wp_create_nonce('wp_rest'),
+            'login_url' => get_permalink($login_id) ?: home_url('/login/'),
+            'register_url' => get_permalink($register_id) ?: home_url('/register/'),
+            'profile_url' => get_permalink($profile_id) ?: home_url('/profile/'),
+            'dashboard_url' => admin_url('admin.php?page=autobid-settings'), // Opcional: enlace al panel de admin
+            'current_user_id' => get_current_user_id(),
+        ];
+        wp_localize_script('autobid-catalog', 'autobid_auth_vars', $data); // Usar el script catalog como base para vars de auth
     }
 
     // Obtener etiquetas personalizadas
