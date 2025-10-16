@@ -1,4 +1,6 @@
 <?php
+// includes/class-shortcodes.php
+
 class AutoBid_Shortcodes {
     public function __construct() {
         add_shortcode('autobid_catalog', [$this, 'render_catalog']);
@@ -10,12 +12,15 @@ class AutoBid_Shortcodes {
         add_shortcode('autobid_featured_vehicles', [$this, 'featured_vehicles_shortcode']);
         add_shortcode('autobid_latest_vehicles', [$this, 'latest_vehicles_shortcode']);
     }
+
     public function render_sales() {
         return $this->render_catalog(['type' => 'venta']);
     }
+
     public function render_auctions() {
         return $this->render_catalog(['type' => 'subasta']);
     }
+
     public function render_catalog($atts) {
         $atts = shortcode_atts(['type' => ''], $atts);
         $type = in_array($atts['type'], ['venta', 'subasta']) ? $atts['type'] : '';
@@ -75,23 +80,29 @@ class AutoBid_Shortcodes {
         <?php
         return ob_get_clean();
     }
+
     public function upcoming_auctions_shortcode() {
         return $this->render_slider_shortcode('upcoming', 'Próximas Subastas');
     }
+
     public function live_auctions_shortcode() {
         return $this->render_slider_shortcode('live', 'Subastas en Curso');
     }
+
     public function direct_sales_slider_shortcode() {
         return $this->render_direct_sales_slider();
     }
+
     public function featured_vehicles_shortcode($atts) {
         $atts = shortcode_atts(['limit' => 6], $atts);
         return $this->render_featured_vehicles((int) $atts['limit']);
     }
+
     public function latest_vehicles_shortcode($atts) {
         $atts = shortcode_atts(['limit' => 6, 'type' => 'all'], $atts);
         return $this->render_latest_vehicles((int) $atts['limit'], $atts['type']);
     }
+
     private function render_slider_shortcode($status, $title) {
         $delay = (int) get_option('autobid_slider_delay', 4000);
         $speed = (int) get_option('autobid_slider_speed', 600);
@@ -251,6 +262,7 @@ class AutoBid_Shortcodes {
         <?php
         return ob_get_clean();
     }
+
     private function render_direct_sales_slider() {
         $delay = (int) get_option('autobid_slider_delay', 4000);
         $speed = (int) get_option('autobid_slider_speed', 600);
@@ -348,6 +360,7 @@ class AutoBid_Shortcodes {
         <?php
         return ob_get_clean();
     }
+
     private function render_featured_vehicles($limit = 6) {
         $vehicles = get_posts([
             'post_type' => 'vehicle',
@@ -359,6 +372,7 @@ class AutoBid_Shortcodes {
         ]);
         return $this->render_simple_vehicle_grid($vehicles, 'Vehículos Destacados');
     }
+
     private function render_latest_vehicles($limit = 6, $type = 'all') {
         $meta_query = [];
         if ($type === 'venta' || $type === 'subasta') {
@@ -381,6 +395,7 @@ class AutoBid_Shortcodes {
         }
         return $this->render_simple_vehicle_grid($vehicles, $title);
     }
+
     private function render_simple_vehicle_grid($posts, $title = '') {
         if (empty($posts)) return '<p>No hay vehículos disponibles.</p>';
         $api = new AutoBid_API();
@@ -412,6 +427,7 @@ class AutoBid_Shortcodes {
         $html .= '</div></div>';
         return $html;
     }
+
     private function format_currency_frontend($amount, $currency = 'USD') {
         if (!$amount || !is_numeric($amount)) $amount = 0;
         return number_format($amount, 0, ',', '.') . ' ' . $currency;

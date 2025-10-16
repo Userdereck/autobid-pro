@@ -1,4 +1,4 @@
-// detail.js - Versión final con multi-moneda y estados
+// public/js/detail.js
 (function() {
     function showToast(message, type = 'success') {
         let toast = document.getElementById('autobid-toast');
@@ -37,15 +37,12 @@
             const response = await fetch(`${API_BASE}/${id}`, {
                 headers: { 'X-WP-Nonce': autobid_vars.nonce }
             });
-            
             if (!response.ok) {
                 const err = await response.json().catch(() => ({}));
                 throw new Error(err.message || 'Vehículo no encontrado');
             }
-            
             const vehicle = await response.json();
             renderVehicleDetail(vehicle);
-            
             if (vehicle.type === 'subasta' && vehicle.end_time) {
                 startAuctionTimer(vehicle.end_time);
             }
@@ -63,12 +60,12 @@
     function renderVehicleDetail(v) {
         const gallery = v.gallery && v.gallery.length > 0 ? v.gallery : [v.image];
         const mainImage = gallery[0];
-        const thumbnails = gallery.map((src, i) => 
+        const thumbnails = gallery.map((src, i) =>
             `<img src="${src}" class="thumbnail ${i === 0 ? 'active' : ''}" data-index="${i}">`
         ).join('');
 
         const isAuction = v.type === 'subasta';
-        const priceDisplay = isAuction 
+        const priceDisplay = isAuction
             ? `${formatCurrency(v.current_bid, v.currency)} <small>(puja actual)</small>`
             : `${formatCurrency(v.price, v.currency)} <small>(precio fijo)</small>`;
 
@@ -81,6 +78,23 @@
 
         const backUrl = isAuction ? autobid_vars.auctions_page_url : autobid_vars.sales_page_url;
 
+        let actionButtonHtml = '';
+        if (isAuction) {
+            if (v.auction_status === 'live') {
+                if (autobid_vars.current_user_id) {
+                    actionButtonHtml = `<button class="action-button" id="action-button">Pujar ahora</button>`;
+                } else {
+                    actionButtonHtml = `<a href="${autobid_auth_vars.login_url || '/login/'}" class="action-button btn-login-required">Iniciar sesión para pujar</a>`;
+                }
+            } else {
+                // Subasta finalizada o próxima
+                actionButtonHtml = `<button class="action-button" id="action-button" ${v.auction_status === 'closed' ? 'disabled' : ''}>${v.auction_status === 'closed' ? 'Subasta finalizada' : 'Subasta próximamente'}</button>`;
+            }
+        } else {
+            // Venta directa
+            actionButtonHtml = `<button class="action-button" id="action-button">Comprar ahora</button>`;
+        }
+
         document.getElementById('vehicle-detail').innerHTML = `
             <div class="detail-container">
                 <div class="gallery-section">
@@ -91,18 +105,14 @@
                         ${thumbnails}
                     </div>
                 </div>
-                
                 <div class="vehicle-info-section">
                     <a href="${backUrl}" class="back-link">← Volver al catálogo</a>
                     <h1 class="vehicle-title">${v.name}</h1>
-                    
                     ${statusBadge}
-                    
                     <div class="price-section">
                         <div class="current-price">${priceDisplay}</div>
                         ${isAuction && v.auction_status === 'live' ? '<div class="auction-timer" id="auction-timer">⏳ Cargando tiempo...</div>' : ''}
                     </div>
-
                     <div class="specs-grid">
                         <div class="spec-item">
                             <span class="spec-label">Marca</span>
@@ -140,18 +150,11 @@
                         </div>
                         `}
                     </div>
-
                     <div class="description-section">
                         <h3>Descripción</h3>
                         <p>${v.description || 'Sin descripción.'}</p>
                     </div>
-
-                    <button class="action-button" id="action-button">
-                        ${isAuction ? 
-                            (v.auction_status === 'live' ? 'Pujar ahora' : 
-                             v.auction_status === 'upcoming' ? 'Notificarme al iniciar' : 'Subasta finalizada') 
-                            : 'Comprar ahora'}
-                    </button>
+                    ${actionButtonHtml}
                 </div>
             </div>
         `;
@@ -166,15 +169,10 @@
         });
 
         const btn = document.getElementById('action-button');
-        if (btn && isAuction && v.auction_status === 'live') {
+        if (btn && isAuction && v.auction_status === 'live' && autobid_vars.current_user_id) {
             btn.addEventListener('click', async () => {
-                if (!autobid_vars.current_user_id) {
-                    showToast('Debes iniciar sesión para pujar.', 'error');
-                    return;
-                }
                 const bid = prompt(`Ingresa tu puja (${v.currency}):`);
                 if (!bid || isNaN(bid)) return;
-                
                 try {
                     const res = await fetch(`${API_BASE}/${v.id}/bid`, {
                         method: 'POST',
@@ -187,7 +185,7 @@
                     const data = await res.json();
                     if (res.ok) {
                         showToast(data.message, 'success');
-                        loadVehicleDetail(v.id);
+                        loadVehicleDetail(v.id); // Recargar para actualizar el precio actual
                     } else {
                         showToast(data.message || 'Error.', 'error');
                     }
@@ -202,7 +200,6 @@
         const endTime = new Date(endTimeStr);
         const timerEl = document.getElementById('auction-timer');
         if (!timerEl) return;
-
         const update = () => {
             const now = new Date();
             const diff = endTime - now;
@@ -215,7 +212,6 @@
             const m = Math.floor((diff % 3600000) / 60000);
             timerEl.innerHTML = `⏳ Termina en: <strong>${d}d ${h}h ${m}m</strong>`;
         };
-
         update();
         setInterval(update, 60000);
     }
@@ -260,7 +256,6 @@
         .autobid-toast.show { transform: translateX(0); }
         .autobid-toast.success { background: #27ae60; }
         .autobid-toast.error { background: var(--accent, #e74c3c); }
-        
         .upcoming-slider-items {
             display: flex;
             gap: 1.5rem;
@@ -304,6 +299,19 @@
             font-size: 1.1rem;
             color: var(--accent, #e74c3c);
             margin: 0.5rem 0;
+        }
+        /* Estilo para el botón de login requerido */
+        .btn-login-required {
+            background-color: #f39c12 !important; /* Color naranja para diferenciar */
+            cursor: pointer;
+        }
+        .btn-login-required:hover {
+            opacity: 0.9;
+        }
+        .btn-login-required:disabled {
+            background-color: #ccc !important;
+            cursor: not-allowed;
+            opacity: 0.6;
         }
     `;
     document.head.appendChild(style);

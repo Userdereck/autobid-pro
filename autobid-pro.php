@@ -185,18 +185,23 @@ function autobid_enqueue_frontend() {
     $sales_id = get_option('autobid_sales_page_id');
     $auctions_id = get_option('autobid_auctions_page_id');
     $detail_id = get_option('autobid_detail_page_id');
+    // --- Obtener IDs de páginas de autenticación ---
     $login_id = get_option('autobid_login_page_id');
     $register_id = get_option('autobid_register_page_id');
     $profile_id = get_option('autobid_profile_page_id');
+    // --- Fin nuevas páginas ---
 
     $is_sales = is_page($sales_id);
     $is_auctions = is_page($auctions_id);
     $is_detail = is_page($detail_id);
+    // --- Verificar si es página de autenticación ---
     $is_login = is_page($login_id);
     $is_register = is_page($register_id);
     $is_profile = is_page($profile_id);
+    // --- Fin verificación nuevas páginas ---
 
-    if (is_page() && !$is_sales && !$is_auctions && !$is_detail) {
+    // Verificar si es página de catálogo genérico con shortcode
+    if (is_page() && !$is_sales && !$is_auctions && !$is_detail && !$is_login && !$is_register && !$is_profile) { // --- Añadir nuevas páginas ---
         $post = get_post();
         if ($post && has_shortcode($post->post_content, 'autobid_catalog')) {
             $is_sales = strpos($post->post_content, 'type="venta"') !== false;
@@ -204,38 +209,30 @@ function autobid_enqueue_frontend() {
         }
     }
 
-    if (!$is_sales && !$is_auctions && !$is_detail) return;
+    // --- Comprobar si es alguna de las páginas relevantes ---
+    $is_relevant_page = ($is_sales || $is_auctions || $is_detail || $is_login || $is_register || $is_profile); // --- Añadir nuevas páginas ---
 
-    wp_enqueue_style('autobid-main', plugin_dir_url(__FILE__) . 'public/css/main.css', [], '1.6');
+    if (!$is_relevant_page) return; // --- Salir si no es ninguna página relevante ---
 
-     if ($is_login || $is_register || $is_profile) {
-        wp_enqueue_style('autobid-auth', plugin_dir_url(__FILE__) . 'public/css/auth.css', [], '1.0');
+    // --- Cargar estilos principales ---
+    wp_enqueue_style('autobid-main', plugin_dir_url(__FILE__) . 'public/css/main.css', [], '1.7'); // Incrementar versión
+
+    // --- Cargar estilos de autenticación si es una página de autenticación ---
+    if ($is_login || $is_register || $is_profile) {
+        wp_enqueue_style('autobid-auth', plugin_dir_url(__FILE__) . 'public/css/auth.css', ['autobid-main'], '1.1'); // Añadir dependencia de main.css
     }
+
+    // --- Cargar scripts y localizar variables ---
     if ($is_sales || $is_auctions) {
         wp_enqueue_script('autobid-catalog', plugin_dir_url(__FILE__) . 'public/js/catalog.js', ['wp-i18n'], '1.5', true);
     }
-    
     if ($is_detail) {
         wp_enqueue_script('autobid-detail', plugin_dir_url(__FILE__) . 'public/js/detail.js', ['wp-i18n'], '1.5', true);
     }
 
-    if ($is_login || $is_register || $is_profile) {
-        $data = [
-            'api_url' => rest_url('autobid/v1/vehicles'),
-            'nonce' => wp_create_nonce('wp_rest'),
-            'login_url' => get_permalink($login_id) ?: home_url('/login/'),
-            'register_url' => get_permalink($register_id) ?: home_url('/register/'),
-            'profile_url' => get_permalink($profile_id) ?: home_url('/profile/'),
-            'dashboard_url' => admin_url('admin.php?page=autobid-settings'), // Opcional: enlace al panel de admin
-            'current_user_id' => get_current_user_id(),
-        ];
-        wp_localize_script('autobid-catalog', 'autobid_auth_vars', $data); // Usar el script catalog como base para vars de auth
-    }
-
-    // Obtener etiquetas personalizadas
+    // --- Datos localizados para autenticación ---
     $label_sale = get_option('autobid_label_sale', 'Venta');
     $label_auction = get_option('autobid_label_auction', 'Subasta');
-
     $data = [
         'api_url' => rest_url('autobid/v1/vehicles'),
         'nonce' => wp_create_nonce('wp_rest'),
@@ -244,7 +241,12 @@ function autobid_enqueue_frontend() {
         'detail_page_url' => get_permalink($detail_id) ?: '#',
         'current_user_id' => get_current_user_id(),
         'label_sale' => $label_sale,
-        'label_auction' => $label_auction
+        'label_auction' => $label_auction,
+        // --- Nuevas URLs para autenticación ---
+        'login_url' => get_permalink($login_id) ?: home_url('/login/'),
+        'register_url' => get_permalink($register_id) ?: home_url('/register/'),
+        'profile_url' => get_permalink($profile_id) ?: home_url('/profile/'),
+        'dashboard_url' => admin_url('admin.php?page=autobid-settings'), // Opcional
     ];
 
     if ($is_sales || $is_auctions) {
@@ -252,6 +254,23 @@ function autobid_enqueue_frontend() {
     }
     if ($is_detail) {
         wp_localize_script('autobid-detail', 'autobid_vars', $data);
+    }
+    // --- Localizar variables para autenticación en páginas relevantes ---
+    if ($is_login || $is_register || $is_profile) {
+        // Creamos un script base solo para variables si no hay otro JS.
+        if (!wp_script_is('autobid-catalog', 'enqueued') && !wp_script_is('autobid-detail', 'enqueued')) {
+             wp_register_script('autobid-auth-base', '', [], '1.0', true);
+             wp_enqueue_script('autobid-auth-base');
+             wp_localize_script('autobid-auth-base', 'autobid_auth_vars', $data);
+        } else {
+             // Si ya hay un script JS cargado (catalog o detail), usamos ese para las variables de autenticación también.
+             // wp_localize_script('autobid-catalog', 'autobid_auth_vars', $data); // Si catalog estuviera cargado
+             // wp_localize_script('autobid-detail', 'autobid_auth_vars', $data); // Si detail estuviera cargado
+             // Dado que no están cargados, usamos el script base.
+             wp_register_script('autobid-auth-base', '', [], '1.0', true);
+             wp_enqueue_script('autobid-auth-base');
+             wp_localize_script('autobid-auth-base', 'autobid_auth_vars', $data);
+        }
     }
 }
 add_action('wp_enqueue_scripts', 'autobid_enqueue_frontend');
