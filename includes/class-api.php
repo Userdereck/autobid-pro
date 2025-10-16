@@ -17,12 +17,32 @@ class AutoBid_API {
         register_rest_route('autobid/v1', '/vehicles/(?P<id>\d+)/bid', [
             'methods' => 'POST',
             'callback' => [$this, 'place_bid'],
-            'permission_callback' => [$this, 'check_user_logged_in']
+            // --- Actualizar permiso ---
+            'permission_callback' => [$this, 'check_user_logged_in_and_authorized']
         ]);
     }
-    public function check_user_logged_in() {
-        return is_user_logged_in();
+    // --- Nueva función de verificación ---
+    public function check_user_logged_in_and_authorized() {
+        if (!is_user_logged_in()) {
+            return false; // No logueado
+        }
+
+        $user = wp_get_current_user();
+        // Verificar si tiene el rol específico o cualquier rol que permitas pujar
+        $allowed_roles = ['vehicle_user', 'administrator', 'editor']; // Ajusta según tus roles
+        $has_role = false;
+        foreach ($allowed_roles as $role) {
+            if (in_array($role, (array) $user->roles)) {
+                $has_role = true;
+                break;
+            }
+        }
+
+        return $has_role;
     }
+    // --- Fin Nueva función de verificación ---
+
+    // --- Mantener el resto del código original ---
     public function get_vehicles($request = null) {
         $type = null;
         if ($request) {
@@ -49,20 +69,21 @@ class AutoBid_API {
         return new WP_REST_Response($this->format_vehicle($post));
     }
     public function place_bid($request) {
-        if (!is_user_logged_in()) {
-            return new WP_Error('unauthorized', 'Debes iniciar sesión para pujar.', ['status' => 401]);
-        }
+        // La verificación de rol ya se hizo en 'permission_callback'
         $vehicle_id = (int) $request['id'];
         $bid_amount = (float) $request['bid_amount'];
-        $user_id = get_current_user_id();
+        $user_id = get_current_user_id(); // El usuario ya está logueado y autorizado
+
         $vehicle = get_post($vehicle_id);
         if (!$vehicle || $vehicle->post_type !== 'vehicle') {
             return new WP_Error('invalid_vehicle', 'Vehículo no válido.', ['status' => 400]);
         }
+
         $auction_status = get_post_meta($vehicle_id, '_auction_status', true);
         if ($auction_status === 'closed') {
             return new WP_Error('auction_closed', 'Esta subasta ya ha finalizado.', ['status' => 400]);
         }
+
         $end_time = get_post_meta($vehicle_id, '_end_time', true);
         if ($end_time && !empty($end_time) && $end_time !== '0000-00-00 00:00:00') {
             $current_time = current_time('Y-m-d H:i:s');
@@ -71,13 +92,16 @@ class AutoBid_API {
                 return new WP_Error('auction_closed', 'Esta subasta ya ha finalizado.', ['status' => 400]);
             }
         }
+
         if ($bid_amount <= 0) {
             return new WP_Error('invalid_bid', 'Monto de puja inválido.', ['status' => 400]);
         }
+
         $current_bid = (float) get_post_meta($vehicle_id, '_current_bid', true);
         if ($bid_amount <= $current_bid) {
             return new WP_Error('low_bid', 'Tu puja debe ser mayor que la actual.', ['status' => 400]);
         }
+
         global $wpdb;
         $table = $wpdb->prefix . 'autobid_bids';
         $result = $wpdb->insert($table, [
@@ -85,12 +109,16 @@ class AutoBid_API {
             'user_id'    => $user_id,
             'bid_amount' => $bid_amount
         ]);
+
         if (!$result) {
             return new WP_Error('db_error', 'Error al registrar la puja.', ['status' => 500]);
         }
+
         update_post_meta($vehicle_id, '_current_bid', $bid_amount);
         update_post_meta($vehicle_id, '_highest_bidder', $user_id);
+
         $this->send_bid_notification($vehicle_id, $user_id, $bid_amount);
+
         return new WP_REST_Response([
             'success' => true,
             'message' => 'Puja registrada exitosamente.',
@@ -130,11 +158,11 @@ Gracias por participar en {$site_name}.";
             $current_time = new DateTime($current_time_str);
             $start_time_str = get_post_meta($post->ID, '_start_time', true);
             $end_time_str = get_post_meta($post->ID, '_end_time', true);
-            $start_time = $start_time_str && $start_time_str !== '0000-00-00 00:00:00' 
-                ? new DateTime($start_time_str) 
+            $start_time = $start_time_str && $start_time_str !== '0000-00-00 00:00:00'
+                ? new DateTime($start_time_str)
                 : new DateTime('1970-01-01 00:00:00');
-            $end_time = $end_time_str && $end_time_str !== '0000-00-00 00:00:00' 
-                ? new DateTime($end_time_str) 
+            $end_time = $end_time_str && $end_time_str !== '0000-00-00 00:00:00'
+                ? new DateTime($end_time_str)
                 : new DateTime('2038-01-19 03:14:07');
             if ($current_time < $start_time) {
                 $status = 'upcoming';

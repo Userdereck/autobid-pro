@@ -111,7 +111,9 @@
                     if (autobid_vars.current_user_id) {
                         actionButtonHtml = `<button class="btn-view-detail" data-id="${v.id}">Pujar ahora</button>`;
                     } else {
+                        // --- Botón de login para pujar ---
                         actionButtonHtml = `<a href="${autobid_auth_vars.login_url || '/login/'}" class="btn-view-detail btn-login-required">Iniciar sesión para pujar</a>`;
+                        // --- Fin Botón de login para pujar ---
                     }
                 } else {
                     // Para subastas próximas o finalizadas

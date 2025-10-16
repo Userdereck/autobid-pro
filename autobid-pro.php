@@ -13,12 +13,16 @@ require_once plugin_dir_path(__FILE__) . 'includes/class-api.php';
 require_once plugin_dir_path(__FILE__) . 'includes/class-auction-cron.php';
 require_once plugin_dir_path(__FILE__) . 'includes/class-shortcodes.php';
 require_once plugin_dir_path(__FILE__) . 'includes/class-auth.php';
+require_once plugin_dir_path(__FILE__) . 'includes/class-admin.php';
+require_once plugin_dir_path(__FILE__) . 'includes/class-frontend-admin.php';
 
 new AutoBid_Post_Types();
 new AutoBid_API();
 new AutoBid_Auction_Cron();
 new AutoBid_Shortcodes();
 new AutoBid_Auth();
+new AutoBid_Admin();
+new AutoBid_Frontend_Admin();
 
 function autobid_create_required_pages() {
     // Ventas directas
@@ -251,6 +255,9 @@ function autobid_enqueue_frontend() {
 
     if ($is_sales || $is_auctions) {
         wp_localize_script('autobid-catalog', 'autobid_vars', $data);
+        // --- Localizar también las variables de autenticación ---
+        wp_localize_script('autobid-catalog', 'autobid_auth_vars', $data);
+        // --- Fin localizar variables de autenticación ---
     }
     if ($is_detail) {
         wp_localize_script('autobid-detail', 'autobid_vars', $data);

@@ -10,10 +10,36 @@ class AutoBid_Auth {
     public function __construct() {
         add_action('init', [$this, 'create_auth_pages']);
         add_action('init', [$this, 'handle_auth_requests']);
+        add_action('init', [$this, 'create_vehicle_user_role']); // <-- Nuevo hook para crear rol
         add_shortcode('autobid_login', [$this, 'render_login_form']);
         add_shortcode('autobid_register', [$this, 'render_register_form']);
         add_shortcode('autobid_profile', [$this, 'render_profile']);
     }
+
+    // --- Crear rol personalizado ---
+    public function create_vehicle_user_role() {
+        // Solo crear el rol si no existe
+        if (get_role('vehicle_user')) {
+            return;
+        }
+
+        // Obtener capacidades base de 'subscriber'
+        $subscriber_caps = get_role('subscriber')->capabilities;
+
+        // Definir capacidades específicas para 'vehicle_user'
+        $vehicle_user_caps = $subscriber_caps; // Heredar capacidades de 'subscriber'
+        $vehicle_user_caps['read'] = true; // Puede leer
+        // Añadir capacidades personalizadas si es necesario
+        $vehicle_user_caps['place_bid'] = true; // Ejemplo de capacidad personalizada
+        $vehicle_user_caps['view_vehicle_details'] = true; // Otro ejemplo
+
+        add_role(
+            'vehicle_user',
+            'Vehicle User',
+            $vehicle_user_caps
+        );
+    }
+    // --- Fin Crear rol personalizado ---
 
     public function create_auth_pages() {
         // Página de Login
@@ -87,13 +113,14 @@ class AutoBid_Auth {
         ], false);
 
         if (is_wp_error($user)) {
-            // Opcional: Agregar mensaje de error a una variable global o usar wp_redirect con un parámetro
             $error_message = $user->get_error_message();
             wp_redirect(add_query_arg('login_error', urlencode($error_message), wp_get_referer()));
             exit;
         } else {
-            // Login exitoso
-            wp_redirect(home_url('/profile/')); // Redirigir al perfil
+            // Opcional: Asignar rol 'vehicle_user' si no lo tiene
+            // Esto podría hacerse aquí o en el registro.
+            $this->ensure_user_role($user->ID);
+            wp_redirect(home_url('/profile/'));
             exit;
         }
     }
@@ -105,7 +132,6 @@ class AutoBid_Auth {
         $first_name = sanitize_text_field($_POST['first_name']);
         $last_name = sanitize_text_field($_POST['last_name']);
 
-        // Validaciones básicas
         if (empty($username) || empty($email) || empty($password)) {
             wp_redirect(add_query_arg('register_error', 'Todos los campos son obligatorios.', wp_get_referer()));
             exit;
@@ -121,24 +147,23 @@ class AutoBid_Auth {
             exit;
         }
 
-        // Crear usuario
         $user_id = wp_create_user($username, $password, $email);
         if (is_wp_error($user_id)) {
             wp_redirect(add_query_arg('register_error', $user_id->get_error_message(), wp_get_referer()));
             exit;
         }
 
-        // Actualizar metadatos del usuario
         update_user_meta($user_id, 'first_name', $first_name);
         update_user_meta($user_id, 'last_name', $last_name);
 
-        // Opcional: Enviar correo de bienvenida
-        wp_new_user_notification($user_id, null, 'admin'); // O 'user' para solo usuario
+        // Asignar rol 'vehicle_user' al nuevo usuario
+        $this->assign_vehicle_user_role($user_id);
 
-        // Login automático después del registro
+        wp_new_user_notification($user_id, null, 'admin');
+
         wp_set_current_user($user_id);
         wp_set_auth_cookie($user_id);
-        wp_redirect(home_url('/profile/')); // Redirigir al perfil
+        wp_redirect(home_url('/profile/'));
         exit;
     }
 
@@ -154,13 +179,11 @@ class AutoBid_Auth {
         $phone = sanitize_text_field($_POST['phone']);
         $address = sanitize_textarea_field($_POST['address']);
 
-        // Actualizar metadatos del usuario
         update_user_meta($user_id, 'first_name', $first_name);
         update_user_meta($user_id, 'last_name', $last_name);
         update_user_meta($user_id, 'phone', $phone);
         update_user_meta($user_id, 'address', $address);
 
-        // Opcional: Actualizar email si es necesario
         if (!empty($_POST['email']) && $_POST['email'] !== wp_get_current_user()->user_email) {
             $new_email = sanitize_email($_POST['email']);
             if (email_exists($new_email) && $new_email !== wp_get_current_user()->user_email) {
@@ -170,7 +193,6 @@ class AutoBid_Auth {
             wp_update_user(['ID' => $user_id, 'user_email' => $new_email]);
         }
 
-        // Opcional: Actualizar contraseña si se envía
         if (!empty($_POST['new_password'])) {
             $old_password = $_POST['old_password'];
             $new_password = $_POST['new_password'];
@@ -181,7 +203,6 @@ class AutoBid_Auth {
                 exit;
             }
 
-            // Verificar contraseña actual
             $user = wp_get_current_user();
             if (!wp_check_password($old_password, $user->user_pass, $user->ID)) {
                 wp_redirect(add_query_arg('profile_error', 'La contraseña actual es incorrecta.', wp_get_referer()));
@@ -195,9 +216,23 @@ class AutoBid_Auth {
         exit;
     }
 
+    // --- Asignar rol 'vehicle_user' ---
+    private function assign_vehicle_user_role($user_id) {
+        $user = new WP_User($user_id);
+        $user->set_role('vehicle_user');
+    }
+
+    // --- Asegurar rol 'vehicle_user' ---
+    private function ensure_user_role($user_id) {
+        $user = new WP_User($user_id);
+        if (empty($user->roles) || !in_array('vehicle_user', $user->roles)) {
+            $user->add_role('vehicle_user');
+        }
+    }
+    // --- Fin Asignar/Asegurar rol ---
+
     public function render_login_form($atts) {
         if (is_user_logged_in()) {
-            // Si ya está logueado, redirigir al perfil
             wp_redirect(home_url('/profile/'));
             exit;
         }
@@ -237,12 +272,11 @@ class AutoBid_Auth {
 
     public function render_register_form($atts) {
         if (is_user_logged_in()) {
-            // Si ya está logueado, redirigir al perfil
             wp_redirect(home_url('/profile/'));
             exit;
         }
 
-        $atts = shortcode_atts([], $atts); // No se usan atributos por ahora
+        $atts = shortcode_atts([], $atts);
         $error_message = isset($_GET['register_error']) ? $_GET['register_error'] : '';
 
         ob_start();
@@ -284,7 +318,6 @@ class AutoBid_Auth {
 
     public function render_profile($atts) {
         if (!is_user_logged_in()) {
-            // Si no está logueado, redirigir al login
             wp_redirect(home_url('/login/'));
             exit;
         }
@@ -311,6 +344,7 @@ class AutoBid_Auth {
                 <p><strong>Nombre:</strong> <?php echo esc_html($current_user->first_name); ?></p>
                 <p><strong>Apellido:</strong> <?php echo esc_html($current_user->last_name); ?></p>
                 <p><strong>Fecha de Registro:</strong> <?php echo esc_html($current_user->user_registered); ?></p>
+                <p><strong>Rol:</strong> <?php echo esc_html(implode(', ', $current_user->roles)); ?></p> <!-- Mostrar rol -->
             </div>
 
             <form method="post" class="autobid-auth-form autobid-profile-form">
