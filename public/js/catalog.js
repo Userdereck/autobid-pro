@@ -105,24 +105,15 @@
                 (autobid_vars.label_sale || 'Venta');
             const badgeClass = `vehicle-type-badge" data-status="${isAuction ? v.auction_status : 'sale'}`;
 
-            let actionButtonHtml = '';
-            if (isAuction) {
-                if (v.auction_status === 'live') {
-                    if (autobid_vars.current_user_id) {
-                        actionButtonHtml = `<button class="btn-view-detail" data-id="${v.id}">Pujar ahora</button>`;
-                    } else {
-                        // --- Botón de login para pujar ---
-                        actionButtonHtml = `<a href="${autobid_auth_vars.login_url || '/login/'}" class="btn-view-detail btn-login-required">Iniciar sesión para pujar</a>`;
-                        // --- Fin Botón de login para pujar ---
-                    }
-                } else {
-                    // Para subastas próximas o finalizadas
-                    actionButtonHtml = `<button class="btn-view-detail" data-id="${v.id}" ${v.auction_status === 'closed' ? 'disabled' : ''}>Ver detalles</button>`;
-                }
-            } else {
-                // Para ventas directas
-                actionButtonHtml = `<button class="btn-view-detail" data-id="${v.id}">Ver detalles</button>`;
+            // --- MODIFICADO: Generar URL de detalle ---
+            // Intentar usar el nuevo formato, sino el viejo
+            // const detailUrl = `${autobid_vars.detail_page_url_slug}?id=${v.id}`; // Antiguo con slug
+            const detailUrl = `${autobid_vars.detail_page_url.replace('%ID%', v.id)}`; // Nuevo formato
+            // Opcional: Fallback al viejo formato si el nuevo no se prefiere o no se reemplaza
+            if (detailUrl.includes('%ID%')) {
+                 detailUrl = `${autobid_vars.detail_page_url_query}${v.id}`;
             }
+            // --- FIN MODIFICADO ---
 
             return `
                 <div class="vehicle-card" data-id="${v.id}">
@@ -139,7 +130,7 @@
                             <span>${v.color || '—'}</span>
                         </div>
                         <div class="price">${formatCurrency(v.price, v.currency)}</div>
-                        ${actionButtonHtml}
+                        <button class="btn-view-detail" data-id="${v.id}">Ver detalles</button>
                     </div>
                 </div>
             `;
@@ -147,10 +138,12 @@
 
         grid.innerHTML = html;
 
-        grid.querySelectorAll('.btn-view-detail:not(.btn-login-required)').forEach(btn => {
+        grid.querySelectorAll('.btn-view-detail').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const id = e.currentTarget.dataset.id;
-                window.location.href = `${autobid_vars.detail_page_url}?id=${id}`;
+                // --- MODIFICADO: Usar la URL generada ---
+                window.location.href = `${autobid_vars.detail_page_url}?id=${id}`; // Asegura ID correcto si se usa placeholder
+                // --- FIN MODIFICADO ---
             });
         });
     }

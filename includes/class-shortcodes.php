@@ -103,7 +103,7 @@ class AutoBid_Shortcodes {
         return $this->render_latest_vehicles((int) $atts['limit'], $atts['type']);
     }
 
-    private function render_slider_shortcode($status, $title) {
+     private function render_slider_shortcode($status, $title) {
         $delay = (int) get_option('autobid_slider_delay', 4000);
         $speed = (int) get_option('autobid_slider_speed', 600);
         ob_start();
@@ -406,6 +406,10 @@ class AutoBid_Shortcodes {
             $v = $api->format_vehicle($post);
             $badgeText = $v['type'] === 'subasta' ? 'Subasta' : 'Venta';
             $price = $v['price'] ? $this->format_currency_frontend($v['price'], $v['currency']) : 'Consultar';
+            // --- MODIFICADO: Generar URL de detalle ---
+            $detail_url = home_url('/detalle/') . $v['id'] . '/'; // Nuevo formato
+            // Opcional: $detail_url = home_url('/?view=detail&id=') . $v['id']; // Formato viejo
+            // --- FIN MODIFICADO ---
             $html .= "
                 <div class='vehicle-card'>
                     <div class='vehicle-image'>
@@ -419,7 +423,7 @@ class AutoBid_Shortcodes {
                             <span>{$v['year']}</span>
                         </div>
                         <div class='price'>{$price}</div>
-                        <a href='" . get_permalink(get_option('autobid_detail_page_id')) . "?id={$v['id']}' class='btn-view-detail'>Ver detalles</a>
+                        <a href='{$detail_url}' class='btn-view-detail'>Ver detalles</a>
                     </div>
                 </div>
             ";
