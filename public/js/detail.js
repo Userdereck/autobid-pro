@@ -197,7 +197,7 @@
                         <h3>Descripción</h3>
                         <p>${v.description || 'No hay descripción disponible.'}</p>
                     </div>
-                    <button class="action-button" id="action-button" ${isAuction && v.auction_status !== 'live' ? 'disabled' : ''}>
+                    <button class="action-button" id="action-button" ${isAuction && v.auction_status === 'closed' ? 'disabled' : ''}>
                         ${actionButtonText}
                     </button>
                 </div>
@@ -217,27 +217,22 @@
         });
 
         // --- Evento para botón de acción (Pujar/Comprar) CORREGIDO ---
-        const btn = document.getElementById('action-button');
+        const btn = document.getElementById('action-button');        
         if (btn) {
             if (isAuction && v.auction_status === 'live') {
-                // Lógica para pujar en subastas en vivo
+                // Lógica para pujar
                 btn.addEventListener('click', async () => {
                     if (!autobid_vars.current_user_id) {
                         showToast('Debes iniciar sesión para pujar.', 'error');
-                        // Opcional: Redirigir al login
-                        // window.location.href = '/login'; // Ajusta la URL
                         return;
                     }
-
                     const bid = prompt(`Ingresa tu puja (${v.currency}):`);
                     if (!bid || isNaN(bid)) return;
-
                     const bidAmount = parseFloat(bid);
                     if (bidAmount <= 0) {
                         showToast('La puja debe ser un número positivo.', 'error');
                         return;
                     }
-
                     try {
                         const res = await fetch(`${API_BASE}/${v.id}/bid`, {
                             method: 'POST',
@@ -247,81 +242,81 @@
                             },
                             body: JSON.stringify({ bid_amount: bidAmount })
                         });
-
                         const data = await res.json();
-
                         if (res.ok) {
                             showToast(data.message || 'Puja registrada exitosamente.', 'success');
-                            // Opcional: Recargar la página para ver la nueva puja actual
-                            // location.reload();
-                            // O mejor, actualizar solo el precio actual si es posible
-                            loadVehicleDetail(v.id); // Recarga los detalles para reflejar la nueva puja
+                            loadVehicleDetail(v.id);
                         } else {
-                            showToast(data.message || 'Error.', 'error');
+                            showToast(data.message || 'Error al pujar.', 'error');
                         }
                     } catch (e) {
-                        console.error('AutoBid Pro: Error de conexión al pujar:', e);
+                        console.error('Error al pujar:', e);
                         showToast('Error de conexión.', 'error');
                     }
                 });
+            } else if (isAuction && v.auction_status === 'upcoming') {
+                // --- NUEVO: Lógica para "Notificarme al iniciar" ---
+                btn.addEventListener('click', async () => {
+                    if (!autobid_vars.current_user_id) {
+                        showToast('Debes iniciar sesión para recibir notificaciones.', 'error');
+                        return;
+                    }
+                    try {
+                        const res = await fetch(`${API_BASE}/${v.id}/watch`, {
+                            method: 'POST',
+                            headers: {
+                                'X-WP-Nonce': autobid_vars.nonce
+                            }
+                        });
+                        const data = await res.json();
+                        if (res.ok) {
+                            showToast(data.message || '¡Te notificaremos al iniciar!', 'success');
+                            // Opcional: deshabilitar botón
+                            btn.disabled = true;
+                            btn.textContent = 'Notificación solicitada';
+                        } else {
+                            showToast(data.message || 'Error al solicitar notificación.', 'error');
+                        }
+                    } catch (e) {
+                        console.error('Error al solicitar notificación:', e);
+                        showToast('Error de conexión.', 'error');
+                    }
+                });
+                // --- FIN NUEVO ---
             } else if (!isAuction) {
-                // --- CORREGIDO Y REFORZADO: Lógica para "Comprar ahora" en ventas directas ---
+                // Lógica para "Comprar ahora"
                 btn.addEventListener('click', async () => {
                     if (!autobid_vars.current_user_id) {
                         showToast('Debes iniciar sesión para comprar.', 'error');
-                        // Opcional: Redirigir al login
-                        // window.location.href = '/login'; // Ajusta la URL
                         return;
                     }
-
                     if (!confirm(`¿Estás seguro de que deseas solicitar la compra de "${v.name}" por ${formatCurrency(v.price, v.currency)}?`)) {
-                        return; // Cancelar si el usuario no confirma
+                        return;
                     }
-
                     try {
-                        // --- CORREGIDO: Enviar solicitud POST para "Comprar ahora" ---
-                        // Usar el endpoint específico para compras o uno genérico
-                        // Por ejemplo, podrías crear un endpoint como POST /autobid/v1/vehicles/{id}/purchase
-                        // O simplemente usar el mismo endpoint de actualización con un flag
-                        // Aquí usamos un endpoint genérico para simular la acción
-                        const res = await fetch(`${API_BASE}/${v.id}/purchase`, { // <-- Endpoint para comprar
+                        const res = await fetch(`${API_BASE}/${v.id}/purchase`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
                                 'X-WP-Nonce': autobid_vars.nonce
                             },
-                            body: JSON.stringify({ action: 'purchase' }) // Enviar acción
+                            body: JSON.stringify({ action: 'purchase' })
                         });
-                        // --- FIN CORREGIDO ---
-
-                        // Importante: Siempre intentar leer la respuesta como JSON
-                        let result;
-                        //let responseTextForDebug = ""; // Para almacenar texto en caso de error de parseo
-                        try {
-                            result = await res.json();
-                        } catch (jsonError) {
-                            // Si falla el parseo JSON, es probable que la respuesta no sea JSON
-                            const text = await res.text();
-                            console.error('Respuesta no JSON:', text);
-                            throw new Error('El servidor devolvió una respuesta no válida.'); // Limitar longitud del log
-                        }
-
-                         if (res.ok && result.success && result.whatsapp_url) {
-                            showToast(result.message || 'Redirigiendo a WhatsApp...', 'success');
-                            // ✅ Redirección a WhatsApp
-                            window.location.href = result.whatsapp_url;
+                        const result = await res.json();
+                        if (res.ok) {
+                            showToast(result.message || 'Solicitud de compra enviada.', 'success');
+                            if (result.whatsapp_url) {
+                                window.open(result.whatsapp_url, '_blank', 'noopener,noreferrer');
+                            }
                         } else {
-                            showToast(result.message || 'No se pudo procesar la solicitud.', 'error');
+                            showToast(result.message || 'Error al procesar la compra.', 'error');
                         }
                     } catch (error) {
-                        // Captura errores de red, de parseo JSON o errores inesperados
-                        console.error('Error crítico al enviar el formulario de compra:', error);
-                        showToast('Error de conexión al servidor o respuesta inesperada: ' + error.message, 'error');
+                        console.error('Error al comprar:', error);
+                        showToast('Error de conexión.', 'error');
                     }
                 });
-                // --- FIN CORREGIDO Y REFORZADO ---
             }
-            // Para subastas no activas (upcoming, closed), el botón está deshabilitado por el atributo disabled
         }
         // --- Fin Evento para botón de acción ---
     }

@@ -16,7 +16,7 @@ class AutoBid_Frontend_Admin {
    
 
     public function create_admin_panel_page() {
-        $admin_panel_page = get_page_by_title('Panel de Administración');
+        $admin_panel_page = get_page_by_path('Panel de Administración');
         if (!$admin_panel_page) {
             $admin_panel_id = wp_insert_post([
                 'post_title'   => 'Panel de Administración',

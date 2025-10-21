@@ -75,7 +75,47 @@ class AutoBid_API {
             'callback' => [$this, 'purchase_vehicle'],
             'permission_callback' => [$this, 'check_user_logged_in_and_authorized'] // Verificar que esté logueado
         ]);
+
+        register_rest_route('autobid/v1', '/my-bids', [
+            'methods' => 'GET',
+            'callback' => [$this, 'get_user_bids'],
+            'permission_callback' => [$this, 'check_user_logged_in_and_authorized']
+        ]);
+
+        register_rest_route('autobid/v1', '/vehicles/(?P<id>\d+)/watch', [
+            'methods' => 'POST',
+            'callback' => [$this, 'add_to_watchlist'],
+            'permission_callback' => [$this, 'check_user_logged_in_and_authorized']
+        ]);
         // --- FIN NUEVA RUTA ---
+    }
+
+    public function add_to_watchlist($request) {
+        $vehicle_id = (int) $request['id'];
+        $user_id = get_current_user_id();
+        $vehicle = get_post($vehicle_id);
+        if (!$vehicle || $vehicle->post_type !== 'vehicle') {
+            return new WP_Error('invalid_vehicle', 'Vehículo no válido.', ['status' => 400]);
+        }
+        $type = get_post_meta($vehicle_id, '_type', true);
+        if ($type !== 'subasta') {
+            return new WP_Error('invalid_type', 'Solo se puede vigilar subastas.', ['status' => 400]);
+        }
+        global $wpdb;
+        $table = $wpdb->prefix . 'autobid_auction_watchlist';
+        $result = $wpdb->insert($table, [
+            'vehicle_id' => $vehicle_id,
+            'user_id'    => $user_id
+        ], [], ['%d', '%d']);
+
+        if (is_wp_error($result)) {
+            return new WP_Error('db_error', 'Error al registrar tu interés.', ['status' => 500]);
+        }
+
+        return new WP_REST_Response([
+            'success' => true,
+            'message' => '¡Te notificaremos cuando la subasta comience!'
+        ], 200);
     }
 
     // --- Nueva función de verificación de permisos de admin ---
@@ -83,6 +123,51 @@ class AutoBid_API {
         return current_user_can('administrator');
     }
     // --- Fin Nueva función ---
+
+    public function get_user_bids($request) {
+        $user_id = get_current_user_id();
+        if (!$user_id) {
+            return new WP_Error('unauthorized', 'Usuario no autenticado.', ['status' => 401]);
+        }
+
+        global $wpdb;
+        $bids = $wpdb->get_results($wpdb->prepare("
+            SELECT b.*, v.post_title as vehicle_title, v.ID as vehicle_id
+            FROM {$wpdb->prefix}autobid_bids b
+            LEFT JOIN {$wpdb->posts} v ON b.vehicle_id = v.ID
+            WHERE b.user_id = %d
+            ORDER BY b.created_at DESC
+        ", $user_id));
+
+        $enriched = array_map(function($bid) use ($user_id) {
+            $vehicle_id = $bid->vehicle_id;
+            $type = get_post_meta($vehicle_id, '_type', true);
+            
+            // Solo procesar subastas
+            if ($type !== 'subasta') {
+                return array_merge((array)$bid, ['status' => 'compra']);
+            }
+
+            $highest_bidder = get_post_meta($vehicle_id, '_highest_bidder', true);
+            $auction_status = get_post_meta($vehicle_id, '_auction_status', true);
+
+            // Depuración (puedes comentar después)
+            error_log("AutoBid: Puja ID {$bid->id}, Usuario: {$user_id}, Highest: {$highest_bidder}, Status: {$auction_status}");
+
+            // ¿Es el usuario el postor más alto?
+            $is_highest = ((string)$highest_bidder === (string)$user_id);
+
+            if ($auction_status === 'closed') {
+                $status = $is_highest ? 'ganadora' : 'perdedora';
+            } else {
+                $status = $is_highest ? 'líder' : 'superada';
+            }
+
+            return array_merge((array)$bid, ['status' => $status]);
+        }, $bids);
+
+        return new WP_REST_Response($enriched, 200);
+    }
 
      // --- Nueva función: Comprar vehículo (venta directa) ---
     public function purchase_vehicle($request) {
@@ -777,22 +862,20 @@ class AutoBid_API {
         }
         return new WP_REST_Response($this->format_vehicle($post));
     }
+   
     public function place_bid($request) {
         // La verificación de rol ya se hizo en 'permission_callback'
         $vehicle_id = (int) $request['id'];
         $bid_amount = (float) $request['bid_amount'];
         $user_id = get_current_user_id(); // El usuario ya está logueado y autorizado
-
         $vehicle = get_post($vehicle_id);
         if (!$vehicle || $vehicle->post_type !== 'vehicle') {
             return new WP_Error('invalid_vehicle', 'Vehículo no válido.', ['status' => 400]);
         }
-
         $auction_status = get_post_meta($vehicle_id, '_auction_status', true);
         if ($auction_status === 'closed') {
             return new WP_Error('auction_closed', 'Esta subasta ya ha finalizado.', ['status' => 400]);
         }
-
         $end_time = get_post_meta($vehicle_id, '_end_time', true);
         if ($end_time && !empty($end_time) && $end_time !== '0000-00-00 00:00:00') {
             $current_time = current_time('Y-m-d H:i:s');
@@ -801,16 +884,13 @@ class AutoBid_API {
                 return new WP_Error('auction_closed', 'Esta subasta ya ha finalizado.', ['status' => 400]);
             }
         }
-
         if ($bid_amount <= 0) {
             return new WP_Error('invalid_bid', 'Monto de puja inválido.', ['status' => 400]);
         }
-
         $current_bid = (float) get_post_meta($vehicle_id, '_current_bid', true);
         if ($bid_amount <= $current_bid) {
             return new WP_Error('low_bid', 'Tu puja debe ser mayor que la actual.', ['status' => 400]);
         }
-
         global $wpdb;
         $table = $wpdb->prefix . 'autobid_bids';
         $result = $wpdb->insert($table, [
@@ -818,31 +898,95 @@ class AutoBid_API {
             'user_id'    => $user_id,
             'bid_amount' => $bid_amount
         ]);
-
         if (!$result) {
             return new WP_Error('db_error', 'Error al registrar la puja en la base de datos.', ['status' => 500]);
         }
-
         update_post_meta($vehicle_id, '_current_bid', $bid_amount);
         update_post_meta($vehicle_id, '_highest_bidder', $user_id);
 
-        $this->send_bid_notification($vehicle_id, $user_id, $bid_amount);
+        // --- NUEVO: Preparar notificación al ADMINISTRADOR ---
+        $admin_whatsapp = get_option('autobid_whatsapp_number', '');
+        $admin_whatsapp_url = null;
+        if (!empty($admin_whatsapp)) {
+            $user = get_userdata($user_id);
+            $vehicle = get_post($vehicle_id);
+            $site_name = get_bloginfo('name');
+            $user_phone = get_user_meta($user_id, 'phone', true);
+            $user_contact = $user_phone ? "Tel: {$user_phone}" : "Email: {$user->user_email}";
+
+            $message = "🔔 *Nueva puja en {$site_name}*\n\n" .
+                    "Vehículo: *{$vehicle->post_title}* (ID: {$vehicle_id})\n" .
+                    "Usuario: *{$user->display_name}* (ID: {$user_id})\n" .
+                    "{$user_contact}\n" .
+                    "Puja: $" . number_format($bid_amount, 2) . "\n" .
+                    "Ver vehículo: " . get_permalink($vehicle_id);
+
+            $admin_whatsapp_url = "https://wa.me/{$admin_whatsapp}?text=" . urlencode($message);
+        }
+
+        // --- NUEVO: Preparar notificación al USUARIO ---
+        $user_whatsapp_url = null;
+        $user_phone = get_user_meta($user_id, 'phone', true);
+        if (!empty($user_phone)) {
+            // Limpiar el número: solo dígitos y +
+            $clean_phone = preg_replace('/[^0-9+]/', '', $user_phone);
+            if (!empty($clean_phone)) {
+                $user_message = "✅ *Tu puja ha sido registrada*\n\n" .
+                                "Vehículo: *{$vehicle->post_title}*\n" .
+                                "Monto: *" . number_format($bid_amount, 2) . "*\n" .
+                                "Gracias por participar en *{$site_name}*.";
+                $user_whatsapp_url = "https://wa.me/{$clean_phone}?text=" . urlencode($user_message);
+            }
+        }
 
         return new WP_REST_Response([
             'success' => true,
             'message' => 'Puja registrada exitosamente.',
-            'current_bid' => $bid_amount
+            'current_bid' => $bid_amount,
+            'admin_whatsapp_url' => $admin_whatsapp_url,
+            'user_whatsapp_url' => $user_whatsapp_url
         ], 200);
     }
+   
     private function send_bid_notification($vehicle_id, $user_id, $bid_amount) {
+        // Obtener número de WhatsApp del administrador (de los ajustes)
+        $admin_whatsapp = get_option('autobid_whatsapp_number', '');
+        if (empty($admin_whatsapp)) {
+            error_log("AutoBid Pro: Número de WhatsApp no configurado. No se puede notificar puja.");
+            return;
+        }
+
         $user = get_userdata($user_id);
         $vehicle = get_post($vehicle_id);
         $site_name = get_bloginfo('name');
-        $subject = '✅ Tu puja ha sido registrada - ' . $vehicle->post_title;
-        $message = "Hola {$user->display_name},
-    Tu puja de $" . number_format($bid_amount, 2) . " para el vehículo \"{$vehicle->post_title}\" ha sido registrada exitosamente.
-    Gracias por participar en {$site_name}.";
-        wp_mail($user->user_email, $subject, $message);
+
+        if (!$user || !$vehicle) {
+            error_log("AutoBid Pro: Usuario o vehículo no encontrado al notificar puja.");
+            return;
+        }
+
+        // Obtener teléfono del usuario (si lo tiene)
+        $user_phone = get_user_meta($user_id, 'phone', true);
+        $user_contact = $user_phone ? "Tel: {$user_phone}" : "Email: {$user->user_email}";
+
+        // Mensaje para el administrador
+        $message = "🔔 *Nueva puja en {$site_name}*\n\n" .
+                "Vehículo: *{$vehicle->post_title}* (ID: {$vehicle_id})\n" .
+                "Usuario: *{$user->display_name}* (ID: {$user_id})\n" .
+                "{$user_contact}\n" .
+                "Puja: $" . number_format($bid_amount, 2) . "\n" .
+                "Ver vehículo: " . get_permalink($vehicle_id);
+
+        $whatsapp_url = "https://wa.me/{$admin_whatsapp}?text=" . urlencode($message);
+        error_log("AutoBid Pro: URL de WhatsApp generada para notificación de puja: {$whatsapp_url}");
+
+        // No redirigimos aquí (esto es backend). En su lugar, devolvemos la URL al frontend.
+        // Pero como place_bid() ya devuelve respuesta, haremos algo diferente:
+        // → Guardaremos la URL en una variable global temporal (solo para esta solicitud)
+        // → O mejor: modificaremos place_bid() para devolverla.
+
+        // Por ahora, solo la registramos. La redirección se hará desde el frontend.
+        // (Ver Paso 2)
     }
    
      // --- Nueva función: Formatear vehículo UNIFICADA ---

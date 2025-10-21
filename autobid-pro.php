@@ -28,7 +28,7 @@ new AutoBid_Frontend_Admin(); // <-- Asegurar que se instancia
 
 function autobid_create_required_pages() {
     // Ventas directas
-    $sales_page = get_page_by_title('Ventas Directas');
+    $sales_page = get_page_by_path('Ventas Directas');
     if (!$sales_page) {
         $sales_id = wp_insert_post([
             'post_title'   => 'Ventas Directas',
@@ -42,7 +42,7 @@ function autobid_create_required_pages() {
     }
 
     // Subastas
-    $auctions_page = get_page_by_title('Subastas');
+    $auctions_page = get_page_by_path('Subastas');
     if (!$auctions_page) {
         $auctions_id = wp_insert_post([
             'post_title'   => 'Subastas',
@@ -56,7 +56,7 @@ function autobid_create_required_pages() {
     }
 
     // Detalle
-    $detail_page = get_page_by_title('Detalle Vehículo');
+    $detail_page = get_page_by_path('Detalle Vehículo');
     if (!$detail_page) {
         $detail_id = wp_insert_post([
             'post_title'   => 'Detalle Vehículo',
@@ -169,9 +169,11 @@ function autobid_render_settings_page() {
     $color_input_bg = get_option('autobid_color_input_bg', '#ffffff');
     $color_input_border = get_option('autobid_color_input_border', '#ced4da');
     $whatsapp_number = get_option('autobid_whatsapp_number', '');
-    $whatsapp_message_purchase = get_option('autobid_whatsapp_message_purchase', "Hola, soy {user_name}. Estoy interesado en comprar el vehículo \"{vehicle_title}\" (ID: {vehicle_id}). Ver: {vehicle_url}");
-
-    ?>
+    $default_msg = "Hola, soy {user_name} (ID: {user_id}). Estoy interesado en comprar el vehículo \"{vehicle_title}\" (ID: {vehicle_id}). Puedes verlo aquí: {vehicle_url}. Gracias por tu atención en {site_name}.";
+    $saved_msg = get_option('autobid_whatsapp_message_purchase', $default_msg);
+    $whatsapp_message_purchase = stripslashes($saved_msg); // ← Corrección clave    
+   
+   ?>
     <div class="wrap">
         <h1>⚙️ Ajustes Esenciales - AutoBid Pro</h1>
         <form method="post">
@@ -398,7 +400,23 @@ function autobid_enqueue_frontend() {
 }
 add_action('wp_enqueue_scripts', 'autobid_enqueue_frontend');
 
-
+function autobid_create_watchlist_table() {
+    global $wpdb;
+    $table = $wpdb->prefix . 'autobid_auction_watchlist';
+    $charset = $wpdb->get_charset_collate();
+    $sql = "CREATE TABLE $table (
+        id mediumint(9) NOT NULL AUTO_INCREMENT,
+        vehicle_id bigint(20) NOT NULL,
+        user_id bigint(20) NOT NULL,
+        created_at datetime DEFAULT CURRENT_TIMESTAMP,
+        notified tinyint(1) DEFAULT 0,
+        PRIMARY KEY (id),
+        UNIQUE KEY unique_watch (vehicle_id, user_id)
+    ) $charset;";
+    require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+    dbDelta($sql);
+}
+register_activation_hook(__FILE__, 'autobid_create_watchlist_table');
 
 // --- NUEVO: Registrar regla de reescritura ---
 function autobid_add_rewrite_rule() {
@@ -463,4 +481,4 @@ function autobid_render_detail_template() {
     }
 }
 add_action('template_redirect', 'autobid_render_detail_template');
-// --- FIN NUEVO ---
+

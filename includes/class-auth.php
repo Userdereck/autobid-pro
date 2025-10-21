@@ -43,7 +43,7 @@ class AutoBid_Auth {
 
     public function create_auth_pages() {
         // Página de Login
-        $login_page = get_page_by_title('Login');
+        $login_page = get_page_by_path('Login');
         if (!$login_page) {
             $login_id = wp_insert_post([
                 'post_title'   => 'Login',
@@ -57,7 +57,7 @@ class AutoBid_Auth {
         }
 
         // Página de Registro
-        $register_page = get_page_by_title('Registro');
+        $register_page = get_page_by_path('Registro');
         if (!$register_page) {
             $register_id = wp_insert_post([
                 'post_title'   => 'Registro',
@@ -71,7 +71,7 @@ class AutoBid_Auth {
         }
 
         // Página de Perfil
-        $profile_page = get_page_by_title('Mi Perfil');
+        $profile_page = get_page_by_path('Mi Perfil');
         if (!$profile_page) {
             $profile_id = wp_insert_post([
                 'post_title'   => 'Mi Perfil',
@@ -131,17 +131,16 @@ class AutoBid_Auth {
         $password = $_POST['password'];
         $first_name = sanitize_text_field($_POST['first_name']);
         $last_name = sanitize_text_field($_POST['last_name']);
+        $phone = sanitize_text_field($_POST['phone']); // <-- Nuevo
 
-        if (empty($username) || empty($email) || empty($password)) {
+        if (empty($username) || empty($email) || empty($password) || empty($phone)) {
             wp_redirect(add_query_arg('register_error', 'Todos los campos son obligatorios.', wp_get_referer()));
             exit;
         }
-
         if (username_exists($username)) {
             wp_redirect(add_query_arg('register_error', 'Nombre de usuario ya existe.', wp_get_referer()));
             exit;
         }
-
         if (email_exists($email)) {
             wp_redirect(add_query_arg('register_error', 'Correo electrónico ya registrado.', wp_get_referer()));
             exit;
@@ -155,12 +154,10 @@ class AutoBid_Auth {
 
         update_user_meta($user_id, 'first_name', $first_name);
         update_user_meta($user_id, 'last_name', $last_name);
+        update_user_meta($user_id, 'phone', $phone); // <-- Guardar teléfono
 
-        // Asignar rol 'vehicle_user' al nuevo usuario
         $this->assign_vehicle_user_role($user_id);
-
         wp_new_user_notification($user_id, null, 'admin');
-
         wp_set_current_user($user_id);
         wp_set_auth_cookie($user_id);
         wp_redirect(home_url('/profile/'));
@@ -305,6 +302,10 @@ class AutoBid_Auth {
                     <input type="text" name="last_name" id="last_name">
                 </div>
                 <div class="autobid-form-group">
+                    <label for="phone">Teléfono (con código de país, ej: +18291234567) <span style="color:#e74c3c;">*</span></label>
+                    <input type="tel" name="phone" id="phone" required placeholder="+18291234567">
+                </div>
+                <div class="autobid-form-group">
                     <label for="password">Contraseña</label>
                     <input type="password" name="password" id="password" required>
                 </div>
@@ -321,62 +322,230 @@ class AutoBid_Auth {
             wp_redirect(home_url('/login/'));
             exit;
         }
-
         $current_user = wp_get_current_user();
-        $profile_updated = isset($_GET['profile_updated']) && $_GET['profile_updated'] === 'true';
-        $profile_error = isset($_GET['profile_error']) ? $_GET['profile_error'] : '';
 
         ob_start();
         ?>
         <div class="autobid-auth-container autobid-profile-container">
-            <h2>Mi Perfil</h2>
-            <?php if ($profile_updated): ?>
-                <div class="autobid-auth-message success">Perfil actualizado correctamente.</div>
-            <?php endif; ?>
-            <?php if ($profile_error): ?>
-                <div class="autobid-auth-message error"><?php echo esc_html($profile_error); ?></div>
-            <?php endif; ?>
+            <h2>Mi Cuenta</h2>
 
-            <div class="autobid-profile-info">
-                <h3>Información del Usuario</h3>
-                <p><strong>Nombre de Usuario:</strong> <?php echo esc_html($current_user->user_login); ?></p>
-                <p><strong>Correo Electrónico:</strong> <?php echo esc_html($current_user->user_email); ?></p>
-                <p><strong>Nombre:</strong> <?php echo esc_html($current_user->first_name); ?></p>
-                <p><strong>Apellido:</strong> <?php echo esc_html($current_user->last_name); ?></p>
-                <p><strong>Fecha de Registro:</strong> <?php echo esc_html($current_user->user_registered); ?></p>
-                <p><strong>Rol:</strong> <?php echo esc_html(implode(', ', $current_user->roles)); ?></p> <!-- Mostrar rol -->
+            <div class="autobid-user-tabs">
+                <button type="button" class="tab-btn active" data-tab="profile">Mi Perfil</button>
+                <button type="button" class="tab-btn" data-tab="bids">Mis Pujas</button>
             </div>
 
-            <form method="post" class="autobid-auth-form autobid-profile-form">
-                <?php wp_nonce_field('autobid_update_profile_action', 'autobid_update_profile_nonce'); ?>
-                <h3>Actualizar Información</h3>
-                <div class="autobid-form-group">
-                    <label for="first_name">Nombre</label>
-                    <input type="text" name="first_name" id="first_name" value="<?php echo esc_attr($current_user->first_name); ?>">
-                </div>
-                <div class="autobid-form-group">
-                    <label for="last_name">Apellido</label>
-                    <input type="text" name="last_name" id="last_name" value="<?php echo esc_attr($current_user->last_name); ?>">
-                </div>
-                <div class="autobid-form-group">
-                    <label for="email">Correo Electrónico</label>
-                    <input type="email" name="email" id="email" value="<?php echo esc_attr($current_user->user_email); ?>">
-                </div>
-                <div class="autobid-form-group">
-                    <label for="phone">Teléfono</label>
-                    <input type="text" name="phone" id="phone" value="<?php echo esc_attr(get_user_meta($current_user->ID, 'phone', true)); ?>">
-                </div>
-                <div class="autobid-form-group">
-                    <label for="address">Dirección</label>
-                    <textarea name="address" id="address"><?php echo esc_textarea(get_user_meta($current_user->ID, 'address', true)); ?></textarea>
-                </div>
-                <button type="submit" class="autobid-auth-button">Actualizar Perfil</button>
-            </form>
+            <div class="autobid-tab-content">
+                <!-- Perfil -->
+                <div id="tab-profile" class="tab-pane active">
+                    <div class="autobid-profile-card">
+                        <h3>Información Personal</h3>
+                        <div class="profile-grid">
+                            <div><strong>Usuario:</strong> <?php echo esc_html($current_user->user_login); ?></div>
+                            <div><strong>Nombre:</strong> <?php echo esc_html($current_user->first_name . ' ' . $current_user->last_name); ?></div>
+                            <div><strong>Email:</strong> <?php echo esc_html($current_user->user_email); ?></div>
+                            <div><strong>Teléfono:</strong> <?php echo esc_html(get_user_meta($current_user->ID, 'phone', true)); ?></div>
+                            <div><strong>Dirección:</strong> <?php echo esc_html(get_user_meta($current_user->ID, 'address', true)); ?></div>
+                            <div><strong>Rol:</strong> <?php echo esc_html(implode(', ', $current_user->roles)); ?></div>
+                            <div><strong>Registrado:</strong> <?php echo esc_html(wp_date('d/m/Y', strtotime($current_user->user_registered))); ?></div>
+                        </div>
+                    </div>
 
-            <form method="post" action="<?php echo esc_url(wp_logout_url(home_url('/login/'))); ?>" class="autobid-logout-form">
-                <button type="submit" class="autobid-auth-button logout">Cerrar Sesión</button>
-            </form>
+                    <form method="post" class="autobid-auth-form autobid-profile-form">
+                        <?php wp_nonce_field('autobid_update_profile_action', 'autobid_update_profile_nonce'); ?>
+                        <h3>Editar Perfil</h3>
+                        <div class="autobid-form-group">
+                            <label for="first_name">Nombre</label>
+                            <input type="text" name="first_name" id="first_name" value="<?php echo esc_attr($current_user->first_name); ?>">
+                        </div>
+                        <div class="autobid-form-group">
+                            <label for="last_name">Apellido</label>
+                            <input type="text" name="last_name" id="last_name" value="<?php echo esc_attr($current_user->last_name); ?>">
+                        </div>
+                        <div class="autobid-form-group">
+                            <label for="email">Correo Electrónico</label>
+                            <input type="email" name="email" id="email" value="<?php echo esc_attr($current_user->user_email); ?>">
+                        </div>
+                        <div class="autobid-form-group">
+                            <label for="phone">Teléfono</label>
+                            <input type="text" name="phone" id="phone" value="<?php echo esc_attr(get_user_meta($current_user->ID, 'phone', true)); ?>">
+                        </div>
+                        <div class="autobid-form-group">
+                            <label for="address">Dirección</label>
+                            <textarea name="address" id="address"><?php echo esc_textarea(get_user_meta($current_user->ID, 'address', true)); ?></textarea>
+                        </div>
+                        <button type="submit" class="autobid-auth-button">Actualizar Perfil</button>
+                    </form>
+
+                    <form method="post" action="<?php echo esc_url(wp_logout_url(home_url('/'))); ?>" class="autobid-logout-form">
+                        <button type="submit" class="autobid-auth-button logout">Cerrar Sesión</button>
+                    </form>
+                </div>
+
+                <!-- Mis Pujas -->
+                <div id="tab-bids" class="tab-pane">
+                    <h3>Mis Pujas</h3>
+                    <div id="user-bids-container">
+                        <p class="loading-text">Cargando tus pujas…</p>
+                    </div>
+                </div>
+            </div>
         </div>
+
+        <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Pestañas
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+                    btn.classList.add('active');
+                    const tabId = 'tab-' + btn.dataset.tab;
+                    document.getElementById(tabId).classList.add('active');
+
+                    if (btn.dataset.tab === 'bids' && !window.bidsLoaded) {
+                        loadUserBids();
+                        window.bidsLoaded = true;
+                    }
+                });
+            });
+
+            // Cargar pujas
+            function loadUserBids() {
+                const container = document.getElementById('user-bids-container');
+                container.innerHTML = '<p class="loading-text">Cargando…</p>';
+                
+                fetch('<?php echo esc_url(rest_url('autobid/v1/my-bids')); ?>', {
+                    headers: { 'X-WP-Nonce': '<?php echo wp_create_nonce('wp_rest'); ?>' }
+                })
+                .then(res => res.json())
+                .then(bids => {
+                    if (bids.length === 0) {
+                        container.innerHTML = '<p class="no-bids">Aún no has realizado ninguna puja.</p>';
+                        return;
+                    }
+                    let html = `<div class="bids-grid">`;
+                    bids.forEach(bid => {
+                        let statusIcon = '❌', statusText = 'Superada', statusClass = 'bid-lost';
+                        if (bid.status === 'ganadora') {
+                            statusIcon = '✅'; statusText = 'Ganadora'; statusClass = 'bid-won';
+                        } else if (bid.status === 'líder') {
+                            statusIcon = '👑'; statusText = 'Líder'; statusClass = 'bid-leading';
+                        } else if (bid.status === 'compra') {
+                            statusIcon = '🛒'; statusText = 'Compra'; statusClass = 'bid-purchase';
+                        }
+
+                        html += `
+                            <div class="bid-card">
+                                <div class="bid-vehicle">
+                                    <strong>${bid.vehicle_title}</strong>
+                                    <small>ID: ${bid.vehicle_id}</small>
+                                </div>
+                                <div class="bid-amount">
+                                    ${parseFloat(bid.bid_amount).toLocaleString('es-ES', { style: 'currency', currency: 'USD' })}
+                                </div>
+                                <div class="bid-date">
+                                    ${new Date(bid.created_at).toLocaleDateString('es-ES')}
+                                </div>
+                                <div class="bid-status ${statusClass}">
+                                    ${statusIcon} ${statusText}
+                                </div>
+                            </div>`;
+                    });
+                    html += `</div>`;
+                    container.innerHTML = html;
+                })
+                .catch(err => {
+                    console.error('Error:', err);
+                    container.innerHTML = '<p class="error">No se pudieron cargar tus pujas.</p>';
+                });
+            }
+        });
+        </script>
+
+        <style>
+        .autobid-profile-container { max-width: 900px; margin: 0 auto; }
+        .autobid-user-tabs {
+            display: flex;
+            margin: 1.5rem 0;
+            border-bottom: 2px solid #e9ecef;
+        }
+        .tab-btn {
+            padding: 0.8rem 1.5rem;
+            background: none;
+            border: none;
+            font-weight: 600;
+            color: #6c757d;
+            cursor: pointer;
+            position: relative;
+        }
+        .tab-btn.active {
+            color: var(--primary);
+        }
+        .tab-btn.active::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: var(--primary);
+        }
+        .tab-pane { display: none; }
+        .tab-pane.active { display: block; }
+
+        .autobid-profile-card {
+            background: #f8f9fa;
+            padding: 1.5rem;
+            border-radius: 12px;
+            margin-bottom: 2rem;
+            border: 1px solid #e9ecef;
+        }
+        .profile-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .bids-grid {
+            display: grid;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        .bid-card {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr;
+            gap: 1rem;
+            padding: 1rem;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+            align-items: center;
+            border: 1px solid #eee;
+        }
+        .bid-vehicle strong { font-size: 1.05rem; color: var(--primary); }
+        .bid-amount { font-weight: 700; color: var(--secondary); font-size: 1.1rem; }
+        .bid-status { font-weight: 600; text-align: right; }
+        .bid-won { color: #27ae60; }
+        .bid-leading { color: #f39c12; }
+        .bid-lost { color: #e74c3c; }
+        .bid-purchase { color: #3498db; }
+
+        .loading-text, .no-bids, .error {
+            text-align: center;
+            padding: 1.5rem;
+            color: #6c757d;
+        }
+        .error { color: #e74c3c; }
+
+        @media (max-width: 768px) {
+            .bid-card {
+                grid-template-columns: 1fr;
+                text-align: center;
+            }
+            .bid-status { text-align: center; }
+        }
+        </style>
         <?php
         return ob_get_clean();
     }
