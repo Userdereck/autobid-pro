@@ -131,195 +131,157 @@ add_action('admin_menu', 'autobid_add_settings_page');
 // --- FIN CORREGIDO ---
 
 // --- CORREGIDO: Renderizar página de ajustes ---
-// Renderizar página de ajustes (VERSIÓN EXTENDIDA Y CORREGIDA)
 function autobid_render_settings_page() {
-    // Verificar si el usuario está logueado y tiene permisos
     if (!is_user_logged_in() || !current_user_can('administrator')) {
-        wp_die('Acceso denegado. Requiere permisos de administrador.');
+        wp_die('Acceso denegado.');
     }
 
-    // Guardar ajustes si hay envío
-    if ($_POST && check_admin_referer('autobid_save_settings', 'autobid_nonce')) { // <-- Verificar nonce
-        // Colores principales
-        update_option('autobid_color_primary', sanitize_hex_color($_POST['color_primary'] ?? '#1e3c72'));
-        update_option('autobid_color_accent', sanitize_hex_color($_POST['color_accent'] ?? '#e74c3c'));
-        update_option('autobid_bg_color', sanitize_hex_color($_POST['bg_color'] ?? '#ffffff'));
-        update_option('autobid_font_family', sanitize_text_field($_POST['font_family'] ?? 'Poppins, sans-serif'));
+    // Guardar ajustes
+    if ($_POST && check_admin_referer('autobid_save_settings', 'autobid_nonce')) {
+        // --- Colores esenciales ---
+        update_option('autobid_color_title', sanitize_hex_color($_POST['color_title'] ?? '#1e3c72'));
+        update_option('autobid_color_label', sanitize_hex_color($_POST['color_label'] ?? '#333333'));
+        update_option('autobid_color_button', sanitize_hex_color($_POST['color_button'] ?? '#1e3c72'));
+        update_option('autobid_color_button_hover', sanitize_hex_color($_POST['color_button_hover'] ?? '#162b50'));
+        update_option('autobid_color_bg', sanitize_hex_color($_POST['color_bg'] ?? '#ffffff'));
+        update_option('autobid_color_input_bg', sanitize_hex_color($_POST['color_input_bg'] ?? '#ffffff'));
+        update_option('autobid_color_input_border', sanitize_hex_color($_POST['color_input_border'] ?? '#ced4da'));
 
-        // Nuevo grupo de colores
-        update_option('autobid_text_color', sanitize_hex_color($_POST['text_color'] ?? '#212529'));
-        update_option('autobid_label_color', sanitize_hex_color($_POST['label_color'] ?? '#333333'));
-        update_option('autobid_button_text_color', sanitize_hex_color($_POST['button_text_color'] ?? '#ffffff'));
-        update_option('autobid_button_bg_color', sanitize_hex_color($_POST['button_bg_color'] ?? '#1e3c72'));
-        update_option('autobid_button_hover_bg', sanitize_hex_color($_POST['button_hover_bg'] ?? '#162b50'));
-        update_option('autobid_input_bg_color', sanitize_hex_color($_POST['input_bg_color'] ?? '#ffffff'));
-        update_option('autobid_input_border_color', sanitize_hex_color($_POST['input_border_color'] ?? '#ced4da'));
+        // --- Textos personalizables ---
+        update_option('autobid_text_comprar', sanitize_text_field($_POST['text_comprar'] ?? 'Comprar ahora'));
+        update_option('autobid_text_pujar', sanitize_text_field($_POST['text_pujar'] ?? 'Pujar ahora'));
+        update_option('autobid_text_login_required', sanitize_text_field($_POST['text_login_required'] ?? 'Debes iniciar sesión para continuar.'));
 
-        // Colores de login
-        update_option('autobid_login_bg', sanitize_hex_color($_POST['login_bg'] ?? '#f8f9fa'));
-        update_option('autobid_login_card_bg', sanitize_hex_color($_POST['login_card_bg'] ?? '#ffffff'));
-        update_option('autobid_login_label_color', sanitize_hex_color($_POST['login_label_color'] ?? '#212529'));
-        update_option('autobid_login_button_bg', sanitize_hex_color($_POST['login_button_bg'] ?? '#1e3c72'));
-        update_option('autobid_login_button_text', sanitize_hex_color($_POST['login_button_text'] ?? '#ffffff'));
+        // --- WhatsApp ---
+        $whatsapp = preg_replace('/[^0-9+]/', '', sanitize_text_field($_POST['whatsapp_number'] ?? ''));
+        update_option('autobid_whatsapp_number', $whatsapp);
+        update_option('autobid_whatsapp_message_purchase', sanitize_textarea_field($_POST['whatsapp_message_purchase'] ?? ''));
 
-        // Otros ajustes
-        update_option('autobid_dark_mode', isset($_POST['dark_mode']) ? 1 : 0);
-        update_option('autobid_logo_url', esc_url_raw($_POST['logo_url'] ?? ''));
-        update_option('autobid_footer_text', wp_kses_post($_POST['footer_text'] ?? '© AutoBid Pro'));
-        update_option('autobid_label_sale', sanitize_text_field($_POST['label_sale'] ?? 'Venta'));
-        update_option('autobid_label_auction', sanitize_text_field($_POST['label_auction'] ?? 'Subasta'));
-        // --- NUEVO: Guardar número de WhatsApp ---
-        update_option('autobid_whatsapp_number', sanitize_text_field($_POST['whatsapp_number'] ?? '')); // <-- Añadido
-        // --- FIN NUEVO ---
-
-        echo '<div class="updated"><p><strong>✅ Ajustes visuales guardados correctamente.</strong></p></div>';
+        echo '<div class="updated"><p><strong>✅ Ajustes guardados.</strong></p></div>';
     }
 
     // Recuperar valores
-    $color_primary = get_option('autobid_color_primary', '#1e3c72');
-    $color_accent = get_option('autobid_color_accent', '#e74c3c');
-    $bg_color = get_option('autobid_bg_color', '#ffffff');
-    $font_family = get_option('autobid_font_family', 'Poppins, sans-serif');
+    $color_title = get_option('autobid_color_title', '#1e3c72');
+    $color_label = get_option('autobid_color_label', '#333333');
+    $color_button = get_option('autobid_color_button', '#1e3c72');
+    $color_button_hover = get_option('autobid_color_button_hover', '#162b50');
+    $color_bg = get_option('autobid_color_bg', '#ffffff');
+    $color_input_bg = get_option('autobid_color_input_bg', '#ffffff');
+    $color_input_border = get_option('autobid_color_input_border', '#ced4da');
+    $whatsapp_number = get_option('autobid_whatsapp_number', '');
+    $whatsapp_message_purchase = get_option('autobid_whatsapp_message_purchase', "Hola, soy {user_name}. Estoy interesado en comprar el vehículo \"{vehicle_title}\" (ID: {vehicle_id}). Ver: {vehicle_url}");
 
-    $text_color = get_option('autobid_text_color', '#212529');
-    $label_color = get_option('autobid_label_color', '#333333');
-    $button_text_color = get_option('autobid_button_text_color', '#ffffff');
-    $button_bg_color = get_option('autobid_button_bg_color', '#1e3c72');
-    $button_hover_bg = get_option('autobid_button_hover_bg', '#162b50');
-    $input_bg_color = get_option('autobid_input_bg_color', '#ffffff');
-    $input_border_color = get_option('autobid_input_border_color', '#ced4da');
-
-    $login_bg = get_option('autobid_login_bg', '#f8f9fa');
-    $login_card_bg = get_option('autobid_login_card_bg', '#ffffff');
-    $login_label_color = get_option('autobid_login_label_color', '#212529');
-    $login_button_bg = get_option('autobid_login_button_bg', '#1e3c72');
-    $login_button_text = get_option('autobid_login_button_text', '#ffffff');
-
-    $dark_mode = get_option('autobid_dark_mode', 0);
-    $logo_url = get_option('autobid_logo_url', '');
-    $footer_text = get_option('autobid_footer_text', '© AutoBid Pro');
-    $label_sale = get_option('autobid_label_sale', 'Venta');
-    $label_auction = get_option('autobid_label_auction', 'Subasta');
-    // --- NUEVO: Recuperar número de WhatsApp ---
-    $whatsapp_number = get_option('autobid_whatsapp_number', ''); // <-- Añadido
-    // --- FIN NUEVO ---
     ?>
-
-    <div class="wrap autobid-settings-page">
-        <h1>🎨 Ajustes Visuales de AutoBid Pro</h1>
+    <div class="wrap">
+        <h1>⚙️ Ajustes Esenciales - AutoBid Pro</h1>
         <form method="post">
-            <?php wp_nonce_field('autobid_save_settings', 'autobid_nonce'); ?> <!-- Añadir nonce -->
+            <?php wp_nonce_field('autobid_save_settings', 'autobid_nonce'); ?>
 
-            <!-- Identidad Visual -->
-            <h2>⚙️ Identidad y Tema</h2>
+            <h2>🎨 Colores</h2>
             <table class="form-table">
-                <tr><th>Logo</th>
-                    <td>
-                        <input type="url" name="logo_url" id="autobid_logo_url" value="<?php echo esc_attr($logo_url); ?>" style="width:70%;">
-                        <button type="button" class="button autobid-upload-btn" data-target="#autobid_logo_url">Subir Imagen</button>
-                        <?php if ($logo_url): ?><div style="margin-top:10px;"><img src="<?php echo esc_url($logo_url); ?>" style="max-height:80px;"></div><?php endif; ?>
-                    </td>
-                </tr>
-                <tr><th>Color Primario</th><td><input type="color" name="color_primary" value="<?php echo esc_attr($color_primary); ?>"></td></tr>
-                <tr><th>Color de Acento</th><td><input type="color" name="color_accent" value="<?php echo esc_attr($color_accent); ?>"></td></tr>
-                <tr><th>Color de Fondo</th><td><input type="color" name="bg_color" value="<?php echo esc_attr($bg_color); ?>"></td></tr>
-                <tr><th>Fuente Base</th><td><input type="text" name="font_family" value="<?php echo esc_attr($font_family); ?>" placeholder="Ej: Poppins, sans-serif"></td></tr>
-                <tr><th>Modo Oscuro</th><td><input type="checkbox" name="dark_mode" value="1" <?php checked($dark_mode, 1); ?>> Activar</td></tr>
-            </table>
-
-            <!-- Colores de texto, labels y botones -->
-            <h2>🖋️ Colores de Texto y Formularios</h2>
-            <table class="form-table">
-                <tr><th>Color de Texto</th><td><input type="color" name="text_color" value="<?php echo esc_attr($text_color); ?>"></td></tr>
-                <tr><th>Color de Etiquetas (labels)</th><td><input type="color" name="label_color" value="<?php echo esc_attr($label_color); ?>"></td></tr>
-                <tr><th>Color Fondo Inputs</th><td><input type="color" name="input_bg_color" value="<?php echo esc_attr($input_bg_color); ?>"></td></tr>
-                <tr><th>Color Borde Inputs</th><td><input type="color" name="input_border_color" value="<?php echo esc_attr($input_border_color); ?>"></td></tr>
-                <tr><th>Color Botón (fondo)</th><td><input type="color" name="button_bg_color" value="<?php echo esc_attr($button_bg_color); ?>"></td></tr>
-                <tr><th>Color Botón (texto)</th><td><input type="color" name="button_text_color" value="<?php echo esc_attr($button_text_color); ?>"></td></tr>
-                <tr><th>Color Hover del Botón</th><td><input type="color" name="button_hover_bg" value="<?php echo esc_attr($button_hover_bg); ?>"></td></tr>
-            </table>
-
-            <!-- Colores del login -->
-            <h2>🔐 Colores del Login Frontend</h2>
-            <table class="form-table">
-                <tr><th>Fondo General</th><td><input type="color" name="login_bg" value="<?php echo esc_attr($login_bg); ?>"></td></tr>
-                <tr><th>Fondo del Contenedor</th><td><input type="color" name="login_card_bg" value="<?php echo esc_attr($login_card_bg); ?>"></td></tr>
-                <tr><th>Color de Etiquetas</th><td><input type="color" name="login_label_color" value="<?php echo esc_attr($login_label_color); ?>"></td></tr>
-                <tr><th>Botón de Login (Fondo)</th><td><input type="color" name="login_button_bg" value="<?php echo esc_attr($login_button_bg); ?>"></td></tr>
-                <tr><th>Botón de Login (Texto)</th><td><input type="color" name="login_button_text" value="<?php echo esc_attr($login_button_text); ?>"></td></tr>
-            </table>
-
-            <!-- Otros -->
-            <h2>💬 Textos Globales</h2>
-            <table class="form-table">
-                <tr><th>Etiqueta para Ventas</th><td><input type="text" name="label_sale" value="<?php echo esc_attr($label_sale); ?>"></td></tr>
-                <tr><th>Etiqueta para Subastas</th><td><input type="text" name="label_auction" value="<?php echo esc_attr($label_auction); ?>"></td></tr>
-                <tr><th>Texto Pie de Página</th><td><textarea name="footer_text" rows="3" cols="50"><?php echo esc_textarea($footer_text); ?></textarea></td></tr>
-                <!-- --- NUEVO CAMPO: Número de WhatsApp --- -->
+                <tr><th>Títulos (h1, h2, h3)</th><td><input type="color" name="color_title" value="<?php echo esc_attr($color_title); ?>"></td></tr>
+                <tr><th>Etiquetas (labels, filtros, formularios)</th><td><input type="color" name="color_label" value="<?php echo esc_attr($color_label); ?>"></td></tr>
+                <tr><th>Botón (fondo)</th><td><input type="color" name="color_button" value="<?php echo esc_attr($color_button); ?>"></td></tr>
+                <tr><th>Botón Hover</th><td><input type="color" name="color_button_hover" value="<?php echo esc_attr($color_button_hover); ?>"></td></tr>
+                <tr><th>Fondo General</th><td><input type="color" name="color_bg" value="<?php echo esc_attr($color_bg); ?>"></td></tr>
+                <tr><th>Fondo Inputs</th><td><input type="color" name="color_input_bg" value="<?php echo esc_attr($color_input_bg); ?>"></td></tr>
+                <tr><th>Borde Inputs</th><td><input type="color" name="color_input_border" value="<?php echo esc_attr($color_input_border); ?>"></td></tr>
                 <tr>
-                    <th>Número de WhatsApp para Compras</th>
+                <th>Texto: Botón Comprar</th>
+                <td><input type="text" name="text_comprar" value="<?php echo esc_attr(get_option('autobid_text_comprar', 'Comprar ahora')); ?>"></td>
+                </tr>
+                <tr>
+                <th>Texto: Botón Pujar</th>
+                <td><input type="text" name="text_pujar" value="<?php echo esc_attr(get_option('autobid_text_pujar', 'Pujar ahora')); ?>"></td>
+                </tr>
+                <tr>
+                <th>Mensaje: Login requerido</th>
+                <td><input type="text" name="text_login_required" value="<?php echo esc_attr(get_option('autobid_text_login_required', 'Debes iniciar sesión para continuar.')); ?>"></td>
+                </tr>
+            </table>
+
+            <h2>💬 WhatsApp - Comprar Ahora</h2>
+            <table class="form-table">
+                <tr>
+                    <th>Número de WhatsApp</th>
                     <td>
                         <input type="text" name="whatsapp_number" value="<?php echo esc_attr($whatsapp_number); ?>" placeholder="+1234567890">
-                        <p class="description">Ingresa el número de WhatsApp (con código de país) al que se enviarán las solicitudes de compra. Ej: +1234567890</p>
+                        <p class="description">Solo dígitos y +. Ej: +18291234567</p>
                     </td>
                 </tr>
-                <!-- --- FIN NUEVO CAMPO --- -->
+                <tr>
+                    <th>Mensaje al Comprar</th>
+                    <td>
+                        <textarea name="whatsapp_message_purchase" rows="4" style="width:100%;"><?php echo esc_textarea($whatsapp_message_purchase); ?></textarea>
+                        <p class="description">Usa: {user_name}, {user_id}, {vehicle_title}, {vehicle_id}, {vehicle_url}, {site_name}</p>
+                    </td>
+                </tr>
             </table>
 
             <?php submit_button('Guardar Ajustes'); ?>
         </form>
     </div>
-
-    <script>
-    jQuery(document).ready(function($){
-        // Subida de logo
-        $('.autobid-upload-btn').on('click', function(e){
-            e.preventDefault();
-            const target = $($(this).data('target'));
-            const frame = wp.media({
-                title: 'Seleccionar Imagen',
-                button: { text: 'Usar esta imagen' },
-                multiple: false
-            });
-            frame.on('select', function() {
-                const attachment = frame.state().get('selection').first().toJSON();
-                target.val(attachment.url);
-            });
-            frame.open();
-        });
-    });
-    </script>
-
-    <style>
-        .autobid-settings-page h1 { color: #1e3c72; }
-        .autobid-settings-page h2 { color: #2a5298; margin-top: 2rem; }
-        .autobid-settings-page .form-table th { width: 280px; text-align: left; vertical-align: top; }
-        .autobid-settings-page .form-table td { padding-bottom: 1rem; }
-        .description {
-             font-size: 0.85rem;
-             color: #6c757d;
-             margin-top: 0.2rem;
-             font-style: italic;
-        }
-    </style>
     <?php
 }
 // --- FIN CORREGIDO ---
 
 // Inyectar CSS personalizado en el frontend
 function autobid_custom_styles() {
-    $primary = get_option('autobid_color_primary', '#1e3c72');
-    $accent = get_option('autobid_color_accent', '#e74c3c');
-    $bg = get_option('autobid_bg_color', '#ffffff');
+    $title = get_option('autobid_color_title', '#1e3c72');
+    $label = get_option('autobid_color_label', '#333333');
+    $button = get_option('autobid_color_button', '#1e3c72');
+    $button_hover = get_option('autobid_color_button_hover', '#162b50');
+    $bg = get_option('autobid_color_bg', '#ffffff');
+    $input_bg = get_option('autobid_color_input_bg', '#ffffff');
+    $input_border = get_option('autobid_color_input_border', '#ced4da');
+
     echo "<style>
-        :root {
-            --primary: {$primary};
-            --accent: {$accent};
-            --light: {$bg};
+        /* Títulos */
+        h1, h2, h3, h4, .vehicle-title, .autobid-auth-container h2, .autobid-auth-container h3 {
+            color: {$title} !important;
         }
-        .vehicle-type-badge[data-status='upcoming'] { background: #3498db; color: white; }
-        .vehicle-type-badge[data-status='live'] { background: {$accent}; color: white; }
-        .vehicle-type-badge[data-status='closed'] { background: #95a5a6; color: white; }
+
+        /* Etiquetas en filtros, login, perfil, formularios */
+        .autobid-filters label,
+        .autobid-form-group label,
+        .specs-grid .spec-label,
+        .autobid-auth-container label,
+        .autobid-profile-form label {
+            color: {$label} !important;
+        }
+
+        /* Fondos */
+        body,
+        .autobid-catalog,
+        .autobid-auth-container {
+            background-color: {$bg} !important;
+        }
+
+        /* Inputs */
+        .autobid-filters input,
+        .autobid-filters select,
+        .autobid-form-group input,
+        .autobid-form-group textarea,
+        .autobid-profile-form input,
+        .autobid-profile-form textarea {
+            background-color: {$input_bg} !important;
+            border-color: {$input_border} !important;
+        }
+
+        /* Botones */
+        .btn-view-detail,
+        .action-button,
+        .autobid-auth-button,
+        .filter-actions .btn-apply {
+            background-color: {$button} !important;
+            color: white !important;
+        }
+        .btn-view-detail:hover,
+        .action-button:hover,
+        .autobid-auth-button:hover,
+        .filter-actions .btn-apply:hover {
+            background-color: {$button_hover} !important;
+        }
     </style>";
 }
 add_action('wp_head', 'autobid_custom_styles');
@@ -373,7 +335,16 @@ function autobid_enqueue_frontend() {
         wp_enqueue_script('autobid-catalog', plugin_dir_url(__FILE__) . 'public/js/catalog.js', ['wp-i18n'], '1.5', true);
     }
     if ($is_detail) {
-        wp_enqueue_script('autobid-detail', plugin_dir_url(__FILE__) . 'public/js/detail.js', ['wp-i18n'], '1.5', true);
+        wp_enqueue_script('autobid-detail', plugin_dir_url(__FILE__) . 'public/js/detail.js', ['wp-i18n'], '1.6', true);
+
+        // --- NUEVO: Localizar textos personalizables ---
+        $texts = [
+            'buy_button' => get_option('autobid_text_comprar', 'Comprar ahora'),
+            'bid_button' => get_option('autobid_text_pujar', 'Pujar ahora'),
+            'login_required' => get_option('autobid_text_login_required', 'Debes iniciar sesión para continuar.')
+        ];
+        wp_localize_script('autobid-detail', 'autobid_texts', $texts);
+        // --- FIN NUEVO ---
     }
 
     // --- Datos localizados para autenticación ---

@@ -111,9 +111,16 @@ class AutoBid_API {
         $vehicle_url = get_permalink($vehicle_id); // URL del vehículo en el frontend
         $site_name = get_bloginfo('name');
 
-        // Crear el mensaje de WhatsApp
-        $whatsapp_message = "Hola, soy {$user->display_name} (ID: {$user_id}). Estoy interesado en comprar el vehículo \"{$vehicle_title}\" (ID: {$vehicle_id}). Puedes verlo aquí: {$vehicle_url}. Gracias por tu atención en {$site_name}.";
+        // Obtener mensaje personalizado
+        $default_msg = "Hola, soy {user_name} (ID: {user_id}). Estoy interesado en comprar el vehículo \"{vehicle_title}\" (ID: {vehicle_id}). Puedes verlo aquí: {vehicle_url}. Gracias por tu atención en {site_name}.";
+        $custom_msg = get_option('autobid_whatsapp_message_purchase', $default_msg);
 
+        // Reemplazar marcadores
+        $whatsapp_message = str_replace(
+            ['{user_name}', '{user_id}', '{vehicle_title}', '{vehicle_id}', '{vehicle_url}', '{site_name}'],
+            [$user->display_name, $user_id, $vehicle_title, $vehicle_id, $vehicle_url, $site_name],
+            $custom_msg
+        );
         // Codificar el mensaje para la URL
         $encoded_message = urlencode($whatsapp_message);
 
@@ -128,7 +135,7 @@ class AutoBid_API {
         // --- NUEVA LÓGICA: Marcar vehículo como vendido (opcional) ---
         // Puedes añadir lógica aquí para marcar el vehículo como vendido, por ejemplo:
         // update_post_meta($vehicle_id, '_sold', '1');
-        // update_post_meta($vehicle_id, '_sold_to', $user_id);
+         //update_post_meta($vehicle_id, '_sold_to', $user_id);
         // update_post_meta($vehicle_id, '_sold_date', current_time('Y-m-d H:i:s'));
         // --- FIN NUEVA LÓGICA ---
 

@@ -115,10 +115,11 @@
         const backUrl = isAuction ? autobid_vars.auctions_page_url : autobid_vars.sales_page_url;
 
         // Texto del botón de acción
+        // Texto del botón de acción
         let actionButtonText = 'Ver detalles';
         if (isAuction) {
             if (v.auction_status === 'live') {
-                actionButtonText = 'Pujar ahora';
+                actionButtonText = autobid_texts?.bid_button || 'Pujar ahora';
             } else if (v.auction_status === 'upcoming') {
                 actionButtonText = 'Notificarme al iniciar';
             } else if (v.auction_status === 'closed') {
@@ -126,7 +127,7 @@
             }
         } else {
             // Para ventas directas
-            actionButtonText = 'Comprar ahora';
+            actionButtonText = autobid_texts?.buy_button || 'Comprar ahora';
         }
 
         // Renderizar HTML
@@ -295,24 +296,22 @@
 
                         // Importante: Siempre intentar leer la respuesta como JSON
                         let result;
-                        let responseTextForDebug = ""; // Para almacenar texto en caso de error de parseo
+                        //let responseTextForDebug = ""; // Para almacenar texto en caso de error de parseo
                         try {
                             result = await res.json();
                         } catch (jsonError) {
                             // Si falla el parseo JSON, es probable que la respuesta no sea JSON
-                            responseTextForDebug = await res.text(); // Obtener el texto plano
-                            console.error('Error al parsear JSON de la respuesta del servidor:', responseTextForDebug);
-                            throw new Error(`Error del servidor (no JSON): ${res.status} - ${responseTextForDebug.substring(0, 200)}...`); // Limitar longitud del log
+                            const text = await res.text();
+                            console.error('Respuesta no JSON:', text);
+                            throw new Error('El servidor devolvió una respuesta no válida.'); // Limitar longitud del log
                         }
 
-                        if (res.ok) {
-                            showToast(result.message || 'Solicitud de compra enviada exitosamente.', 'success');
-                            // Opcional: Redirigir a una página de confirmación o al catálogo
-                            // window.location.href = autobid_vars.sales_page_url;
+                         if (res.ok && result.success && result.whatsapp_url) {
+                            showToast(result.message || 'Redirigiendo a WhatsApp...', 'success');
+                            // ✅ Redirección a WhatsApp
+                            window.location.href = result.whatsapp_url;
                         } else {
-                            // Si la respuesta no es OK, pero se pudo parsear como JSON, usar el mensaje del servidor
-                            console.warn("El servidor respondió con un error (pero JSON válido):", result);
-                            showToast(result.message || `Error ${res.status} al procesar la solicitud: ${JSON.stringify(result)}`, 'error');
+                            showToast(result.message || 'No se pudo procesar la solicitud.', 'error');
                         }
                     } catch (error) {
                         // Captura errores de red, de parseo JSON o errores inesperados
