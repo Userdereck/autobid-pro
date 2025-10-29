@@ -29,11 +29,12 @@ class AutoBid_Auction_Cron {
     }
 
     /** Función principal */
+    /** Función principal: cerrar o iniciar subastas */
     public function close_expired_auctions() {
         error_log("AutoBid Pro: Ejecutando close_expired_auctions...");
         $now = current_time('Y-m-d H:i:s');
 
-        // 1️⃣ Activar subastas pendientes
+        // 1️⃣ ACTIVAR subastas pendientes
         $upcoming = get_posts([
             'post_type'   => 'vehicle',
             'post_status' => 'publish',
@@ -53,7 +54,7 @@ class AutoBid_Auction_Cron {
             }
         }
 
-        // 2️⃣ Cerrar subastas vencidas
+        // 2️⃣ CERRAR subastas activas vencidas
         $live = get_posts([
             'post_type'   => 'vehicle',
             'post_status' => 'publish',
@@ -64,10 +65,11 @@ class AutoBid_Auction_Cron {
             ]
         ]);
 
+        global $wpdb;
+
         foreach ($live as $vehicle) {
             $end = get_post_meta($vehicle->ID, '_end_time', true);
             if ($end && strtotime($end) <= strtotime($now)) {
-                global $wpdb;
                 $highest = $wpdb->get_row($wpdb->prepare("
                     SELECT user_id, bid_amount
                     FROM {$wpdb->prefix}autobid_bids
@@ -76,18 +78,42 @@ class AutoBid_Auction_Cron {
                     LIMIT 1
                 ", $vehicle->ID));
 
+                $ideal_price = floatval(get_post_meta($vehicle->ID, '_ideal_price', true));
+                $admin_email = get_option('admin_email');
+                $site_name   = get_bloginfo('name');
+
                 if ($highest) {
-                    update_post_meta($vehicle->ID, '_auction_status', 'closed');
+                    $bid_amount = floatval($highest->bid_amount);
                     update_post_meta($vehicle->ID, '_winner_user_id', $highest->user_id);
-                    $this->notify_winner($vehicle->ID, $highest->user_id, $highest->bid_amount);
+
+                    // 🔍 Validar contra precio ideal
+                    if ($ideal_price > 0 && $bid_amount < $ideal_price) {
+                        update_post_meta($vehicle->ID, '_auction_status', 'closed_below_ideal');
+
+                        // 📧 Notificar solo al admin
+                        $vehicle_url = home_url("/vehiculo/?id={$vehicle->ID}");
+                        $subject = "⚠️ Subasta no alcanzó el precio ideal - {$vehicle->post_title}";
+                        $body = autobid_build_email(
+                            "Subasta finalizada sin precio ideal",
+                            "<p>El vehículo <strong>{$vehicle->post_title}</strong> finalizó con una puja de <strong>\${$bid_amount}</strong>, menor al precio ideal de <strong>\${$ideal_price}</strong>.</p>
+                            <p>El último postor fue el usuario ID {$highest->user_id}.</p>
+                            <p><a href='{$vehicle_url}'>Ver detalles del vehículo</a></p>"
+                        );
+                        wp_mail($admin_email, $subject, $body, ['Content-Type: text/html; charset=UTF-8']);
+                        error_log("⚠️ AutoBid Pro: Subasta cerrada por debajo del precio ideal → Solo admin notificado (ID {$vehicle->ID})");
+                    } else {
+                        update_post_meta($vehicle->ID, '_auction_status', 'closed');
+                        $this->notify_winner($vehicle->ID, $highest->user_id, $bid_amount);
+                        error_log("✅ AutoBid Pro: Subasta cerrada y ganada → {$vehicle->post_title} (ID {$vehicle->ID})");
+                    }
                 } else {
                     update_post_meta($vehicle->ID, '_auction_status', 'closed_no_bids');
+                    error_log("ℹ️ AutoBid Pro: Subasta cerrada sin pujas → {$vehicle->post_title}");
                 }
-
-                error_log("AutoBid Pro: Subasta cerrada → {$vehicle->post_title} (ID {$vehicle->ID})");
             }
         }
     }
+
 
     /** 🔔 Notificar usuarios que siguen la subasta */
     private function notify_watchers($vehicle_id) {
@@ -108,7 +134,9 @@ class AutoBid_Auction_Cron {
             $user = get_userdata($watcher->user_id);
             if (!$user) continue;
 
-            $vehicle_url = get_permalink($vehicle_id);
+             $vehicle_url = home_url('/vehiculo/?id=' . $vehicle_id);
+             
+
             $title = "🚨 ¡Tu subasta ha comenzado! - {$vehicle->post_title}";
             $content = "<p>El vehículo <strong>{$vehicle->post_title}</strong> ya está disponible para recibir pujas.</p>
                         <p><a href='{$vehicle_url}'>Ver subasta</a></p>";
@@ -131,49 +159,62 @@ class AutoBid_Auction_Cron {
     }
 
     /** 🏆 Notificar ganador */
+    /** 🏆 Notificar ganador o admin si no se alcanzó el precio ideal */
     private function notify_winner($vehicle_id, $user_id, $bid_amount) {
         $user = get_userdata($user_id);
         $vehicle = get_post($vehicle_id);
         if (!$user || !$vehicle) return;
 
+        $ideal_price = floatval(get_post_meta($vehicle_id, '_ideal_price', true));
+        $price_ok = ($bid_amount >= $ideal_price || $ideal_price <= 0);
+
         $site_name = get_bloginfo('name');
         $admin_email = get_option('admin_email');
-        $from_email  = get_option('autobid_sender_email', $admin_email);
-        $from_name   = get_option('autobid_sender_name', $site_name);
+        $from_email = get_option('autobid_sender_email', $admin_email);
+        $from_name  = get_option('autobid_sender_name', $site_name);
 
-        $vehicle_url = get_permalink($vehicle_id);
-        $formatted_bid = '$' . number_format($bid_amount, 2);
+        // URL corregida con ?id=
+        $vehicle_url = home_url('/vehiculo/?id=' . $vehicle_id);
+        $formatted_bid = number_format($bid_amount, 2);
 
-        $subject_user = "🏆 ¡Felicidades! Ganaste la subasta - {$vehicle->post_title}";
         $subject_admin = "🏁 Subasta finalizada - {$vehicle->post_title}";
+        $body_admin = autobid_build_email(
+            "Subasta finalizada - {$vehicle->post_title}",
+            "<p>El vehículo <strong>{$vehicle->post_title}</strong> ha finalizado.</p>
+            <ul>
+                <li><strong>Última puja:</strong> {$formatted_bid}</li>
+                <li><strong>Postor:</strong> {$user->display_name} ({$user->user_email})</li>
+                <li><strong>Precio ideal:</strong> {$ideal_price}</li>
+            </ul>
+            <p><a href='{$vehicle_url}'>Ver vehículo</a></p>"
+        );
 
+        // --- Si no alcanza el precio ideal, NO se notifica al usuario ---
+        if (!$price_ok) {
+            wp_mail($admin_email, $subject_admin, $body_admin, [
+                'Content-Type: text/html; charset=UTF-8',
+                "From: {$from_name} <{$from_email}>"
+            ]);
+            error_log("⚠️ AutoBid Pro: Subasta bajo el precio ideal. Solo se notificó al admin.");
+            return;
+        }
+
+        // --- Si lo alcanza, se envían ambos correos ---
+        $subject_user = "🏆 ¡Felicidades! Ganaste la subasta - {$vehicle->post_title}";
         $body_user = autobid_build_email(
             "¡Felicidades {$user->display_name}!",
             "<p>Has ganado la subasta del vehículo <strong>{$vehicle->post_title}</strong> con una puja de <strong>{$formatted_bid}</strong>.</p>
             <p><a href='{$vehicle_url}'>Ver detalles del vehículo</a></p>"
         );
 
-        $body_admin = autobid_build_email(
-            "Subasta finalizada - {$vehicle->post_title}",
-            "<p>El vehículo <strong>{$vehicle->post_title}</strong> ha finalizado.</p>
-            <ul>
-                <li><strong>Ganador:</strong> {$user->display_name}</li>
-                <li><strong>Email:</strong> {$user->user_email}</li>
-                <li><strong>Puja:</strong> {$formatted_bid}</li>
-            </ul>
-            <p><a href='{$vehicle_url}'>Ver vehículo</a></p>"
-        );
-
-        $headers = [
-            'Content-Type: text/html; charset=UTF-8',
-            "From: {$from_name} <{$from_email}>"
-        ];
+        $headers = ['Content-Type: text/html; charset=UTF-8', "From: {$from_name} <{$from_email}>"];
 
         $sent_user = wp_mail($user->user_email, $subject_user, $body_user, $headers);
         $sent_admin = wp_mail($admin_email, $subject_admin, $body_admin, $headers);
 
         error_log("📨 AutoBid Pro: Correos → User: " . ($sent_user ? "OK" : "FALLO") . " | Admin: " . ($sent_admin ? "OK" : "FALLO"));
     }
+
 
     /** Forzar manualmente notificación */
     public function force_notify_winner($vehicle_id, $user_id = 0, $amount = 0) {

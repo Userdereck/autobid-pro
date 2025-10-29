@@ -76,7 +76,7 @@ class AutoBid_Frontend_Admin {
         ob_start();
         ?>
         <div class="autobid-admin-frontend-wrap">
-            <h1>Panel de Administración - AutoBid Pro</h1>
+            <h1>Panel de Administración</h1>
 
             <nav class="autobid-admin-tabs">
                 <button class="tab-button active" data-tab="dashboard">Dashboard</button>
@@ -135,6 +135,10 @@ class AutoBid_Frontend_Admin {
                             <label for="vehicle-price">Precio:</label>
                             <input type="number" step="0.01" id="vehicle-price" name="price">
 
+                            <label for="vehicle_ideal_price">Precio ideal:</label>
+                            <input type="number" name="price_ideal" id="vehicle_ideal_price">
+
+
                             <label for="vehicle-currency">Moneda:</label>
                             <select id="vehicle-currency" name="currency">
                                 <option value="USD">Dólar (USD)</option>
@@ -143,7 +147,8 @@ class AutoBid_Frontend_Admin {
                                 <option value="MXN">Peso Mexicano (MXN)</option>
                                 <option value="COP">Peso Colombiano (COP)</option>
                                 <option value="PEN">Sol Peruano (PEN)</option>
-                            </select>
+                            </select>                            
+                            
 
                             <label for="vehicle-brand">Marca:</label>
                             <input type="text" id="vehicle-brand" name="brand">
@@ -204,8 +209,8 @@ class AutoBid_Frontend_Admin {
                     </div>
                 </div>
 
-                <!-- Pestañas placeholders -->
-                <!-- Nueva pestaña para Pujas -->
+              
+            
                 <!-- Nueva sección para Pujas MEJORADA -->
                 <div id="tab-bids" class="tab-pane">
                     <h2>Gestión de Pujas</h2>
@@ -230,7 +235,7 @@ class AutoBid_Frontend_Admin {
                         </table>
                     </div>
                 </div>
-                <!-- Fin Nueva sección para Pujas MEJORADA -->
+             
                 <!-- Fin Nueva pestaña para Pujas -->
 
                 <!-- Nueva pestaña para Ventas -->
@@ -820,6 +825,11 @@ class AutoBid_Frontend_Admin {
                         document.getElementById('vehicle-description').value = vehicle.description ?? vehicle.content ?? vehicle.post_content ?? '';
                         document.getElementById('vehicle-type').value = vehicle.type ?? vehicle._type ?? 'venta';
                         document.getElementById('vehicle-price').value = vehicle.price ?? vehicle._price ?? '';
+                        const idealField = document.getElementById('vehicle_ideal_price');
+                        if (idealField) {
+                            idealField.value = vehicle.ideal_price ?? vehicle._ideal_price ?? '';
+                        }
+
                         document.getElementById('vehicle-currency').value = vehicle.currency ?? vehicle._currency ?? 'USD';
                         document.getElementById('vehicle-brand').value = vehicle.brand ?? '';
                         document.getElementById('vehicle-model').value = vehicle.model ?? '';

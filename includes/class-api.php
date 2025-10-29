@@ -232,7 +232,7 @@ class AutoBid_API {
 
         $user = get_userdata($user_id);
         $vehicle_title = $vehicle->post_title;
-        $vehicle_url = get_permalink($vehicle_id);
+        $vehicle_url = home_url('/vehiculo/?id=' . $vehicle_id);
         $site_name = get_bloginfo('name');
 
         // Admin URL
@@ -300,6 +300,7 @@ class AutoBid_API {
         $content = sanitize_textarea_field($params['content'] ?? '');
         $type = sanitize_text_field($params['type'] ?? 'venta');
         $price = floatval($params['price'] ?? 0);
+        $price_ideal = floatval($params['price_ideal'] ?? 0);
         $currency = sanitize_text_field($params['currency'] ?? 'USD');
         $brand = sanitize_text_field($params['brand'] ?? '');
         $model = sanitize_text_field($params['model'] ?? '');
@@ -344,6 +345,8 @@ class AutoBid_API {
 
         update_post_meta($post_id, '_type', $type);
         if ($price > 0) update_post_meta($post_id, '_price', $price);
+        if ($price_ideal > 0) update_post_meta($post_id, '_ideal_price', $price_ideal);
+
         update_post_meta($post_id, '_currency', $currency);
         if ($brand) update_post_meta($post_id, '_brand', $brand);
         if ($model) update_post_meta($post_id, '_model', $model);
@@ -467,6 +470,8 @@ class AutoBid_API {
         $content = sanitize_textarea_field($params['content'] ?? $post->post_content);
         $type = sanitize_text_field($params['type'] ?? get_post_meta($id, '_type', true));
         $price = floatval($params['price'] ?? get_post_meta($id, '_price', true));
+        $price_ideal = floatval($params['price_ideal'] ?? get_post_meta($id, '_ideal_price', true));
+
         $currency = sanitize_text_field($params['currency'] ?? get_post_meta($id, '_currency', true));
         $brand = sanitize_text_field($params['brand'] ?? get_post_meta($id, '_brand', true));
         $model = sanitize_text_field($params['model'] ?? get_post_meta($id, '_model', true));
@@ -549,6 +554,8 @@ class AutoBid_API {
 
         update_post_meta($id, '_type', $type);
         if ($price > 0) update_post_meta($id, '_price', $price);
+        if ($price_ideal > 0) update_post_meta($id, '_ideal_price', $price_ideal);
+
         update_post_meta($id, '_currency', $currency);
         if ($brand) update_post_meta($id, '_brand', $brand);
         if ($model) update_post_meta($id, '_model', $model);
@@ -701,32 +708,82 @@ class AutoBid_API {
 
     public function get_vehicles($request = null) {
         error_log("AutoBid Pro API: get_vehicles called.");
+
+        global $wpdb;
         $type = null;
         if ($request) {
-            $type = $request->get_param('type');
+            $type = sanitize_text_field($request->get_param('type'));
         }
 
+        // Si es una subasta, aplicar orden personalizado
+        if ($type === 'subasta') {
+            $now = current_time('mysql');
+
+            // Query SQL para obtener IDs de subastas ordenadas por estado
+            $query_ids = $wpdb->get_col($wpdb->prepare("
+                SELECT p.ID
+                FROM {$wpdb->posts} p
+                INNER JOIN {$wpdb->postmeta} m1 ON p.ID = m1.post_id AND m1.meta_key = '_start_time'
+                INNER JOIN {$wpdb->postmeta} m2 ON p.ID = m2.post_id AND m2.meta_key = '_end_time'
+                WHERE p.post_type = 'vehicle'
+                AND p.post_status = 'publish'
+                AND EXISTS (
+                    SELECT 1 FROM {$wpdb->postmeta}
+                    WHERE post_id = p.ID AND meta_key = '_type' AND meta_value = 'subasta'
+                )
+                ORDER BY
+                CASE
+                    WHEN m1.meta_value <= %s AND m2.meta_value >= %s THEN 1  -- En curso
+                    WHEN m1.meta_value > %s THEN 2                            -- Próximas
+                    WHEN m2.meta_value < %s THEN 3                            -- Finalizadas
+                    ELSE 4
+                END,
+                m1.meta_value ASC
+            ", $now, $now, $now, $now));
+
+            // Si no hay resultados, evita error
+            $ids = $query_ids ?: [0];
+
+            // Crear query principal en el orden calculado
+            $posts = get_posts([
+                'post_type'      => 'vehicle',
+                'post_status'    => 'publish',
+                'post__in'       => $ids,
+                'orderby'        => 'post__in',
+                'numberposts'    => -1,
+            ]);
+
+            error_log("AutoBid Pro API: Subastas ordenadas por estado → " . count($posts));
+            return new WP_REST_Response(array_map([$this, 'format_vehicle'], $posts));
+        }
+
+        // --- Resto de tipos normales (venta, mixto o all) ---
         if (!$type || $type === 'all') {
             $meta_query = [
                 'relation' => 'OR',
                 ['key' => '_type', 'value' => 'venta'],
                 ['key' => '_type', 'value' => 'subasta']
             ];
-        } elseif ($type === 'venta' || $type === 'subasta') {
-            $meta_query = [['key' => '_type', 'value' => $type]];
+        } elseif ($type === 'venta') {
+            $meta_query = [['key' => '_type', 'value' => 'venta']];
         } else {
+            // Tipo inválido o desconocido
             $meta_query = [['key' => '_type', 'value' => 'invalid_placeholder_to_force_empty_result']];
         }
 
         $posts = get_posts([
-            'post_type' => 'vehicle',
-            'meta_query' => $meta_query,
-            'numberposts' => -1,
-            'post_status' => 'publish'
+            'post_type'      => 'vehicle',
+            'meta_query'     => $meta_query,
+            'numberposts'    => -1,
+            'post_status'    => 'publish',
+            'orderby'        => 'date',
+            'order'          => 'DESC'
         ]);
+
         error_log("AutoBid Pro API: Number of vehicles found: " . count($posts));
         return new WP_REST_Response(array_map([$this, 'format_vehicle'], $posts));
     }
+
 
     public function get_vehicle($request) {
         $id = (int) $request['id'];
@@ -799,7 +856,7 @@ class AutoBid_API {
             $user_phone = get_user_meta($user_id, 'phone', true);
             $user_contact = $user_phone ? "Tel: {$user_phone}" : "Email: {$user->user_email}";
 
-            $message = "🔔 Nueva puja en {$site_name}\n\nVehículo: {$vehicle->post_title} (ID: {$vehicle_id})\nUsuario: {$user->display_name} (ID: {$user_id})\n{$user_contact}\nPuja: $" . number_format($bid_amount, 2) . "\nVer: " . get_permalink($vehicle_id);
+            $message = "🔔 Nueva puja en {$site_name}\n\nVehículo: {$vehicle->post_title} (ID: {$vehicle_id})\nUsuario: {$user->display_name} (ID: {$user_id})\n{$user_contact}\nPuja: $" . number_format($bid_amount, 2) . "\nVer: " . $vehicle_url = home_url('/vehiculo/?id=' . $vehicle_id);
             $admin_whatsapp_url = "https://wa.me/".rawurlencode($admin_whatsapp)."?text=".rawurlencode($message);
         }
 
@@ -817,7 +874,7 @@ class AutoBid_API {
         // Send email notifications: admin and bidder
         try {
             $user = get_userdata($user_id);
-            $vehicle_url = get_permalink($vehicle_id);
+            $vehicle_url = home_url('/vehiculo/?id=' . $vehicle_id);
             $site_name = get_bloginfo('name');
 
             // Email admin
@@ -915,7 +972,9 @@ class AutoBid_API {
             'auction_status' => $status,
             'featured' => get_post_meta($post->ID, '_featured', true) ?: '0',
             'image' => get_the_post_thumbnail_url($post->ID, 'large') ?: ($gallery[0] ?? 'https://placehold.co/600x400'),
-            'gallery' => $gallery ?: [get_the_post_thumbnail_url($post->ID, 'large') ?: 'https://placehold.co/600x400']
+            'gallery' => $gallery ?: [get_the_post_thumbnail_url($post->ID, 'large') ?: 'https://placehold.co/600x400'],
+            'ideal_price' => (float) get_post_meta($post->ID, '_ideal_price', true),
+
         ];
     }
 

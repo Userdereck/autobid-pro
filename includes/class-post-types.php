@@ -50,6 +50,10 @@ class AutoBid_Post_Types {
                 <option value="PEN" ' . selected($currency, 'PEN', false) . '>Sol Peruano (PEN)</option>
             </select>
         </td></tr>';
+        echo '<tr><th><label for="vehicle_ideal_price">Precio Ideal de Venta</label></th>';
+        echo '<td><input type="number" id="vehicle_ideal_price" name="vehicle_ideal_price" value="' . esc_attr(get_post_meta($post->ID, '_ideal_price', true)) . '" class="regular-text">';
+        echo '<p class="description">Precio mínimo deseado para considerar la subasta exitosa.</p></td></tr>';
+
         echo '<tr><th><label for="vehicle_brand">Marca</label></th>';
         echo '<td><input type="text" id="vehicle_brand" name="vehicle_brand" value="' . esc_attr($brand) . '" class="regular-text"></td></tr>';
         echo '<tr><th><label for="vehicle_model">Modelo</label></th>';
@@ -139,6 +143,7 @@ class AutoBid_Post_Types {
         return $dt->format('Y-m-d\TH:i');
     }
     public function save_vehicle_meta($post_id, $post, $update) {
+        // Validaciones de seguridad
         if (!isset($_POST['vehicle_meta_nonce']) || !wp_verify_nonce($_POST['vehicle_meta_nonce'], 'vehicle_meta_box')) {
             return;
         }
@@ -148,11 +153,15 @@ class AutoBid_Post_Types {
         if (!current_user_can('edit_post', $post_id)) {
             return;
         }
+
+        // Determinar tipo de vehículo
         $type = 'venta';
         if (isset($_POST['vehicle_type']) && $_POST['vehicle_type'] === 'subasta') {
             $type = 'subasta';
         }
         update_post_meta($post_id, '_type', $type);
+
+        // Guardar campos básicos
         $fields = ['price', 'brand', 'year', 'location', 'model', 'color', 'condition'];
         foreach ($fields as $field) {
             $key = "_{$field}";
@@ -163,10 +172,32 @@ class AutoBid_Post_Types {
                 delete_post_meta($post_id, $key);
             }
         }
+
+        // 🔹 Nuevo campo: Precio ideal de venta
+        if (isset($_POST['vehicle_ideal_price'])) {
+            $ideal_price = floatval($_POST['vehicle_ideal_price']);
+            update_post_meta($post_id, '_ideal_price', $ideal_price);
+        }
+
+        // Destacado
         $featured = isset($_POST['vehicle_featured']) ? '1' : '';
         update_post_meta($post_id, '_featured', $featured);
+
+        // Moneda
         $currency = sanitize_text_field($_POST['vehicle_currency'] ?? 'USD');
         update_post_meta($post_id, '_currency', $currency);
+
+
+        // Guardar precio ideal (solo si es subasta)
+        if ($type === 'subasta' && isset($_POST['vehicle_ideal_price'])) {
+            $ideal_price = floatval($_POST['vehicle_ideal_price']);
+            update_post_meta($post_id, '_ideal_price', $ideal_price);
+        } else {
+            delete_post_meta($post_id, '_ideal_price');
+        }
+
+
+        // Si es subasta, guardar fechas
         if ($type === 'subasta') {
             if (isset($_POST['vehicle_start_time'])) {
                 $start_input = sanitize_text_field($_POST['vehicle_start_time']);
@@ -186,6 +217,8 @@ class AutoBid_Post_Types {
             delete_post_meta($post_id, '_start_time');
             delete_post_meta($post_id, '_end_time');
         }
+
+        // Galería
         if (isset($_POST['vehicle_gallery'])) {
             $gallery = sanitize_text_field($_POST['vehicle_gallery']);
             if ($gallery !== '') {
@@ -193,4 +226,5 @@ class AutoBid_Post_Types {
             }
         }
     }
+
 }

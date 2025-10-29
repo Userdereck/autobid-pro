@@ -21,27 +21,16 @@ class AutoBid_Settings {
 
     /* ---------- Panel de Ajustes ---------- */
     public function add_plugin_menu() {
-        if (!post_type_exists('vehicle')) {
-            add_menu_page(
-                'AutoBid Pro',
-                'AutoBid Pro',
-                'manage_options',
-                'autobid-pro-settings',
-                [$this, 'render_settings_page_html'],
-                'dashicons-car',
-                56
-            );
-        } else {
-            add_submenu_page(
-                'edit.php?post_type=vehicle',
-                'Ajustes AutoBid Pro',
-                'Ajustes',
-                'manage_options',
-                'autobid-pro-settings',
-                [$this, 'render_settings_page_html']
-            );
-        }
+        add_submenu_page(
+            'edit.php?post_type=vehicle',
+            'Ajustes AutoBid Pro',
+            'Ajustes',
+            'manage_options',
+            'autobid-pro-settings',
+            [$this, 'render_settings_page_html']
+        );
     }
+
 
     public function render_settings_page_html() {
         if (!is_user_logged_in() || !current_user_can('manage_options')) {
