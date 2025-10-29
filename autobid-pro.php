@@ -11,6 +11,10 @@ defined('ABSPATH') or die('Acceso directo no permitido.');
 require_once plugin_dir_path(__FILE__) . 'includes/class-post-types.php';
 require_once plugin_dir_path(__FILE__) . 'includes/class-api.php';
 require_once plugin_dir_path(__FILE__) . 'includes/class-auction-cron.php';
+require_once plugin_dir_path(__FILE__) . 'includes/email-template.php';
+
+require_once plugin_dir_path(__FILE__) . 'includes/class-settings.php';
+
 require_once plugin_dir_path(__FILE__) . 'includes/class-shortcodes.php';
 // --- Nuevos archivos añadidos ---
 require_once plugin_dir_path(__FILE__) . 'includes/class-auth.php';
@@ -22,57 +26,64 @@ new AutoBid_API();
 new AutoBid_Auction_Cron();
 new AutoBid_Shortcodes();
 // --- Nuevas instancias ---
+
+new AutoBid_settings();
 new AutoBid_Auth();
 new AutoBid_Frontend_Admin(); // <-- Asegurar que se instancia
 // --- Fin nuevas instancias ---
 
+// Reemplazar la función existente por esta versión
 function autobid_create_required_pages() {
-    // Ventas directas
-    $sales_page = get_page_by_path('Ventas Directas');
-    if (!$sales_page) {
-        $sales_id = wp_insert_post([
-            'post_title'   => 'Ventas Directas',
-            'post_content' => '[autobid_catalog type="venta"]',
-            'post_status'  => 'publish',
-            'post_type'    => 'page',
-            'post_name'    => 'ventas'
-        ]);
-    } else {
-        $sales_id = $sales_page->ID;
-    }
+    $pages = [
+        [
+            'title' => 'Ventas Directas',
+            'content' => '[autobid_catalog type="venta"]',
+            'slug' => 'ventas',
+            'option' => 'autobid_sales_page_id'
+        ],
+        [
+            'title' => 'Subastas',
+            'content' => '[autobid_catalog type="subasta"]',
+            'slug' => 'subastas',
+            'option' => 'autobid_auctions_page_id'
+        ],
+        [
+            'title' => 'Detalle Vehículo',
+            'content' => '<div id="vehicle-detail"></div>',
+            'slug' => 'vehiculo',
+            'option' => 'autobid_detail_page_id'
+        ],
+    ];
 
-    // Subastas
-    $auctions_page = get_page_by_path('Subastas');
-    if (!$auctions_page) {
-        $auctions_id = wp_insert_post([
-            'post_title'   => 'Subastas',
-            'post_content' => '[autobid_catalog type="subasta"]',
-            'post_status'  => 'publish',
-            'post_type'    => 'page',
-            'post_name'    => 'subastas'
-        ]);
-    } else {
-        $auctions_id = $auctions_page->ID;
-    }
+    foreach ($pages as $p) {
+        // Buscar por slug primero (ruta correcta para get_page_by_path)
+        $page = get_page_by_path($p['slug']);
+        if (!$page) {
+            // Si no existe por slug, intentar por título (por si se creó con otro slug)
+            $page_by_title = get_page_by_title($p['title'], OBJECT, 'page');
+            if ($page_by_title) {
+                $page = $page_by_title;
+            }
+        }
 
-    // Detalle
-    $detail_page = get_page_by_path('Detalle Vehículo');
-    if (!$detail_page) {
-        $detail_id = wp_insert_post([
-            'post_title'   => 'Detalle Vehículo',
-            'post_content' => '<div id="vehicle-detail"></div>',
-            'post_status'  => 'publish',
-            'post_type'    => 'page',
-            'post_name'    => 'vehiculo'
-        ]);
-    } else {
-        $detail_id = $detail_page->ID;
-    }
+        if ($page) {
+            $page_id = $page->ID;
+        } else {
+            $page_id = wp_insert_post([
+                'post_title'   => $p['title'],
+                'post_content' => $p['content'],
+                'post_status'  => 'publish',
+                'post_type'    => 'page',
+                'post_name'    => $p['slug']
+            ]);
+        }
 
-    update_option('autobid_sales_page_id', $sales_id);
-    update_option('autobid_auctions_page_id', $auctions_id);
-    update_option('autobid_detail_page_id', $detail_id);
+        if (!is_wp_error($page_id) && $page_id) {
+            update_option($p['option'], $page_id);
+        }
+    }
 }
+
 register_activation_hook(__FILE__, 'autobid_create_required_pages');
 
 function autobid_create_bids_table() {
@@ -95,136 +106,7 @@ function autobid_create_bids_table() {
 register_activation_hook(__FILE__, 'autobid_create_bids_table');
 
 // --- CORREGIDO: Añadir página de ajustes al menú ---
-// Añadir página de ajustes al menú
-function autobid_add_settings_page() {
-    // --- CORREGIDO: Usar WP_Query en lugar de get_page_by_title ---
-    $settings_page_query = new WP_Query([
-        'post_type' => 'page',
-        'title' => 'Ajustes de AutoBid Pro',
-        'post_status' => 'publish',
-        'posts_per_page' => 1,
-        'no_found_rows' => true,
-    ]);
-    if ($settings_page_query->have_posts()) {
-        $settings_page_id = $settings_page_query->posts[0]->ID;
-    } else {
-        $settings_page_id = wp_insert_post([
-            'post_title'   => 'Ajustes de AutoBid Pro',
-            'post_content' => '[autobid_settings]', // Shortcode de ajustes
-            'post_status'  => 'publish',
-            'post_type'    => 'page',
-            'post_name'    => 'autobid-settings' // Slug amigable
-        ]);
-    }
-    wp_reset_postdata(); // Importante resetear
 
-    add_submenu_page(
-        'edit.php?post_type=vehicle',
-        'AutoBid Pro - Ajustes',
-        'Ajustes',
-        'manage_options',
-        'autobid-settings', // Slug del menú
-        'autobid_render_settings_page' // Función de renderizado
-    );
-}
-add_action('admin_menu', 'autobid_add_settings_page');
-// --- FIN CORREGIDO ---
-
-// --- CORREGIDO: Renderizar página de ajustes ---
-function autobid_render_settings_page() {
-    if (!is_user_logged_in() || !current_user_can('administrator')) {
-        wp_die('Acceso denegado.');
-    }
-
-    // Guardar ajustes
-    if ($_POST && check_admin_referer('autobid_save_settings', 'autobid_nonce')) {
-        // --- Colores esenciales ---
-        update_option('autobid_color_title', sanitize_hex_color($_POST['color_title'] ?? '#1e3c72'));
-        update_option('autobid_color_label', sanitize_hex_color($_POST['color_label'] ?? '#333333'));
-        update_option('autobid_color_button', sanitize_hex_color($_POST['color_button'] ?? '#1e3c72'));
-        update_option('autobid_color_button_hover', sanitize_hex_color($_POST['color_button_hover'] ?? '#162b50'));
-        update_option('autobid_color_bg', sanitize_hex_color($_POST['color_bg'] ?? '#ffffff'));
-        update_option('autobid_color_input_bg', sanitize_hex_color($_POST['color_input_bg'] ?? '#ffffff'));
-        update_option('autobid_color_input_border', sanitize_hex_color($_POST['color_input_border'] ?? '#ced4da'));
-
-        // --- Textos personalizables ---
-        update_option('autobid_text_comprar', sanitize_text_field($_POST['text_comprar'] ?? 'Comprar ahora'));
-        update_option('autobid_text_pujar', sanitize_text_field($_POST['text_pujar'] ?? 'Pujar ahora'));
-        update_option('autobid_text_login_required', sanitize_text_field($_POST['text_login_required'] ?? 'Debes iniciar sesión para continuar.'));
-
-        // --- WhatsApp ---
-        $whatsapp = preg_replace('/[^0-9+]/', '', sanitize_text_field($_POST['whatsapp_number'] ?? ''));
-        update_option('autobid_whatsapp_number', $whatsapp);
-        update_option('autobid_whatsapp_message_purchase', sanitize_textarea_field($_POST['whatsapp_message_purchase'] ?? ''));
-
-        echo '<div class="updated"><p><strong>✅ Ajustes guardados.</strong></p></div>';
-    }
-
-    // Recuperar valores
-    $color_title = get_option('autobid_color_title', '#1e3c72');
-    $color_label = get_option('autobid_color_label', '#333333');
-    $color_button = get_option('autobid_color_button', '#1e3c72');
-    $color_button_hover = get_option('autobid_color_button_hover', '#162b50');
-    $color_bg = get_option('autobid_color_bg', '#ffffff');
-    $color_input_bg = get_option('autobid_color_input_bg', '#ffffff');
-    $color_input_border = get_option('autobid_color_input_border', '#ced4da');
-    $whatsapp_number = get_option('autobid_whatsapp_number', '');
-    $default_msg = "Hola, soy {user_name} (ID: {user_id}). Estoy interesado en comprar el vehículo \"{vehicle_title}\" (ID: {vehicle_id}). Puedes verlo aquí: {vehicle_url}. Gracias por tu atención en {site_name}.";
-    $saved_msg = get_option('autobid_whatsapp_message_purchase', $default_msg);
-    $whatsapp_message_purchase = stripslashes($saved_msg); // ← Corrección clave    
-   
-   ?>
-    <div class="wrap">
-        <h1>⚙️ Ajustes Esenciales - AutoBid Pro</h1>
-        <form method="post">
-            <?php wp_nonce_field('autobid_save_settings', 'autobid_nonce'); ?>
-
-            <h2>🎨 Colores</h2>
-            <table class="form-table">
-                <tr><th>Títulos (h1, h2, h3)</th><td><input type="color" name="color_title" value="<?php echo esc_attr($color_title); ?>"></td></tr>
-                <tr><th>Etiquetas (labels, filtros, formularios)</th><td><input type="color" name="color_label" value="<?php echo esc_attr($color_label); ?>"></td></tr>
-                <tr><th>Botón (fondo)</th><td><input type="color" name="color_button" value="<?php echo esc_attr($color_button); ?>"></td></tr>
-                <tr><th>Botón Hover</th><td><input type="color" name="color_button_hover" value="<?php echo esc_attr($color_button_hover); ?>"></td></tr>
-                <tr><th>Fondo General</th><td><input type="color" name="color_bg" value="<?php echo esc_attr($color_bg); ?>"></td></tr>
-                <tr><th>Fondo Inputs</th><td><input type="color" name="color_input_bg" value="<?php echo esc_attr($color_input_bg); ?>"></td></tr>
-                <tr><th>Borde Inputs</th><td><input type="color" name="color_input_border" value="<?php echo esc_attr($color_input_border); ?>"></td></tr>
-                <tr>
-                <th>Texto: Botón Comprar</th>
-                <td><input type="text" name="text_comprar" value="<?php echo esc_attr(get_option('autobid_text_comprar', 'Comprar ahora')); ?>"></td>
-                </tr>
-                <tr>
-                <th>Texto: Botón Pujar</th>
-                <td><input type="text" name="text_pujar" value="<?php echo esc_attr(get_option('autobid_text_pujar', 'Pujar ahora')); ?>"></td>
-                </tr>
-                <tr>
-                <th>Mensaje: Login requerido</th>
-                <td><input type="text" name="text_login_required" value="<?php echo esc_attr(get_option('autobid_text_login_required', 'Debes iniciar sesión para continuar.')); ?>"></td>
-                </tr>
-            </table>
-
-            <h2>💬 WhatsApp - Comprar Ahora</h2>
-            <table class="form-table">
-                <tr>
-                    <th>Número de WhatsApp</th>
-                    <td>
-                        <input type="text" name="whatsapp_number" value="<?php echo esc_attr($whatsapp_number); ?>" placeholder="+1234567890">
-                        <p class="description">Solo dígitos y +. Ej: +18291234567</p>
-                    </td>
-                </tr>
-                <tr>
-                    <th>Mensaje al Comprar</th>
-                    <td>
-                        <textarea name="whatsapp_message_purchase" rows="4" style="width:100%;"><?php echo esc_textarea($whatsapp_message_purchase); ?></textarea>
-                        <p class="description">Usa: {user_name}, {user_id}, {vehicle_title}, {vehicle_id}, {vehicle_url}, {site_name}</p>
-                    </td>
-                </tr>
-            </table>
-
-            <?php submit_button('Guardar Ajustes'); ?>
-        </form>
-    </div>
-    <?php
-}
 // --- FIN CORREGIDO ---
 
 // Inyectar CSS personalizado en el frontend
@@ -481,4 +363,97 @@ function autobid_render_detail_template() {
     }
 }
 add_action('template_redirect', 'autobid_render_detail_template');
+
+
+register_activation_hook(__FILE__, function() {
+    $auth = new AutoBid_Auth();
+    $auth->create_auth_pages();
+    $auth->create_vehicle_user_role();
+});
+
+register_activation_hook(__FILE__, function() {
+    $frontend_admin = new AutoBid_Frontend_Admin();
+    $frontend_admin->create_admin_panel_page();
+});
+
+// --- REGISTRAR RUTA AMIGABLE PARA DETALLES DE VEHÍCULO ---
+function autobid_register_vehicle_rewrite() {
+    // Crea regla: /vehiculo/nombre-del-vehiculo/
+    add_rewrite_rule(
+        '^vehiculo/([^/]+)/?',
+        'index.php?post_type=vehicle&name=$matches[1]',
+        'top'
+    );
+}
+add_action('init', 'autobid_register_vehicle_rewrite');
+
+/**
+ * ==========================================================
+ * AUTO-BID PRO: Página de detalle /vehiculo/?id=285 (compatible con detail.js)
+ * ==========================================================
+ *
+ * Este bloque:
+ *  - Crea la página /vehiculo/ si no existe.
+ *  - Evita duplicados en cada actualización.
+ *  - Inserta un contenedor #vehicle-detail para que detail.js pueda renderizar.
+ *  - Hace flush de enlaces permanentes al activar el plugin.
+ */
+
+// ---------------------------------------------------------
+// 1️⃣  Crear (si no existe) la página base /vehiculo/
+// ---------------------------------------------------------
+function autobid_register_vehicle_page() {
+    $page_slug = 'vehiculo';
+    $page_title = 'Vehículo';
+
+    $existing = get_page_by_path($page_slug);
+    if (!$existing) {
+        $page_id = wp_insert_post([
+            'post_title'   => $page_title,
+            'post_name'    => $page_slug,
+            'post_content' => '<div id="vehicle-detail"></div>',
+            'post_status'  => 'publish',
+            'post_type'    => 'page',
+        ]);
+
+        if (!is_wp_error($page_id)) {
+            update_option('autobid_vehicle_page_id', $page_id);
+            error_log("AutoBid Pro: Página '/vehiculo' creada con ID {$page_id}");
+        } else {
+            error_log("AutoBid Pro ERROR: No se pudo crear la página '/vehiculo'.");
+        }
+    } else {
+        update_option('autobid_vehicle_page_id', $existing->ID);
+    }
+}
+add_action('init', 'autobid_register_vehicle_page');
+
+// ---------------------------------------------------------
+// 2️⃣  Flush de reglas al activar/desactivar el plugin
+// ---------------------------------------------------------
+register_activation_hook(__FILE__, function() {
+    autobid_register_vehicle_page();
+    flush_rewrite_rules();
+});
+register_deactivation_hook(__FILE__, 'flush_rewrite_rules');
+
+// ---------------------------------------------------------
+// 3️⃣  Asegurar variables JS globales para detail.js
+// ---------------------------------------------------------
+add_action('wp_enqueue_scripts', function() {
+    // Solo cargar en la página /vehiculo/
+    if (is_page('vehiculo')) {
+        wp_enqueue_script('autobid-detail', plugins_url('public/js/detail.js', __FILE__), ['jquery'], '1.0', true);
+
+        wp_localize_script('autobid-detail', 'autobid_vars', [
+            'api_url'           => esc_url(rest_url('autobid/v1/vehicles')),
+            'nonce'             => wp_create_nonce('wp_rest'),
+            'current_user_id'   => get_current_user_id(),
+            'sales_page_url'    => esc_url(site_url('/ventas/')),
+            'auctions_page_url' => esc_url(site_url('/subastas/')),
+        ]);
+    }
+});
+
+
 

@@ -5,7 +5,7 @@ if (!defined('ABSPATH')) exit;
 class AutoBid_Frontend_Admin {
 
     public function __construct() {
-        add_action('init', [$this, 'create_admin_panel_page']);
+        //add_action('init', [$this, 'create_admin_panel_page']); sin usar 
         add_shortcode('autobid_admin_panel', [$this, 'render_admin_panel']);
 
          // --- CORREGIDO: Registrar el hook admin_init aquí, fuera de cualquier función de renderizado ---
@@ -16,8 +16,16 @@ class AutoBid_Frontend_Admin {
    
 
     public function create_admin_panel_page() {
-        $admin_panel_page = get_page_by_path('Panel de Administración');
-        if (!$admin_panel_page) {
+        // Buscar por slug correcto (minúsculas, sin espacios)
+        $page = get_page_by_path('admin-panel');
+
+        // Si no encuentra por slug, buscar por título (por compatibilidad con versiones viejas)
+        if (!$page) {
+            $page = get_page_by_title('Panel de Administración', OBJECT, 'page');
+        }
+
+        // Crear solo si realmente no existe
+        if (!$page) {
             $admin_panel_id = wp_insert_post([
                 'post_title'   => 'Panel de Administración',
                 'post_content' => '[autobid_admin_panel]',
@@ -26,10 +34,14 @@ class AutoBid_Frontend_Admin {
                 'post_name'    => 'admin-panel'
             ]);
         } else {
-            $admin_panel_id = $admin_panel_page->ID;
+            $admin_panel_id = $page->ID;
         }
-        update_option('autobid_admin_panel_page_id', $admin_panel_id);
+
+        if (!is_wp_error($admin_panel_id) && $admin_panel_id) {
+            update_option('autobid_admin_panel_page_id', $admin_panel_id);
+        }
     }
+
 
     // --- Nueva función: Añadir campo de número de WhatsApp a los ajustes ---
     public function add_whatsapp_setting_field() {

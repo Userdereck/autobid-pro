@@ -8,9 +8,9 @@ if (!defined('ABSPATH')) {
 class AutoBid_Auth {
 
     public function __construct() {
-        add_action('init', [$this, 'create_auth_pages']);
+        
         add_action('init', [$this, 'handle_auth_requests']);
-        add_action('init', [$this, 'create_vehicle_user_role']); // <-- Nuevo hook para crear rol
+       
         add_shortcode('autobid_login', [$this, 'render_login_form']);
         add_shortcode('autobid_register', [$this, 'render_register_form']);
         add_shortcode('autobid_profile', [$this, 'render_profile']);
@@ -42,52 +42,59 @@ class AutoBid_Auth {
     // --- Fin Crear rol personalizado ---
 
     public function create_auth_pages() {
-        // Página de Login
-        $login_page = get_page_by_path('Login');
-        if (!$login_page) {
-            $login_id = wp_insert_post([
-                'post_title'   => 'Login',
-                'post_content' => '[autobid_login]',
-                'post_status'  => 'publish',
-                'post_type'    => 'page',
-                'post_name'    => 'login'
-            ]);
-        } else {
-            $login_id = $login_page->ID;
-        }
+        $pages = [
+            [
+                'title' => 'Login',
+                'slug' => 'login',
+                'content' => '[autobid_login]',
+                'option' => 'autobid_login_page_id'
+            ],
+            [
+                'title' => 'Registro',
+                'slug' => 'register',
+                'content' => '[autobid_register]',
+                'option' => 'autobid_register_page_id'
+            ],
+            [
+                'title' => 'Mi Perfil',
+                'slug' => 'profile',
+                'content' => '[autobid_profile]',
+                'option' => 'autobid_profile_page_id'
+            ]
+        ];
 
-        // Página de Registro
-        $register_page = get_page_by_path('Registro');
-        if (!$register_page) {
-            $register_id = wp_insert_post([
-                'post_title'   => 'Registro',
-                'post_content' => '[autobid_register]',
-                'post_status'  => 'publish',
-                'post_type'    => 'page',
-                'post_name'    => 'register'
-            ]);
-        } else {
-            $register_id = $register_page->ID;
-        }
+        foreach ($pages as $p) {
+            // Buscar por slug primero (forma correcta)
+            $page = get_page_by_path($p['slug']);
 
-        // Página de Perfil
-        $profile_page = get_page_by_path('Mi Perfil');
-        if (!$profile_page) {
-            $profile_id = wp_insert_post([
-                'post_title'   => 'Mi Perfil',
-                'post_content' => '[autobid_profile]',
-                'post_status'  => 'publish',
-                'post_type'    => 'page',
-                'post_name'    => 'profile'
-            ]);
-        } else {
-            $profile_id = $profile_page->ID;
-        }
+            // Si no la encuentra, intentar por título
+            if (!$page) {
+                $page_by_title = get_page_by_title($p['title'], OBJECT, 'page');
+                if ($page_by_title) {
+                    $page = $page_by_title;
+                }
+            }
 
-        update_option('autobid_login_page_id', $login_id);
-        update_option('autobid_register_page_id', $register_id);
-        update_option('autobid_profile_page_id', $profile_id);
+            // Crear solo si no existe
+            if ($page) {
+                $page_id = $page->ID;
+            } else {
+                $page_id = wp_insert_post([
+                    'post_title'   => $p['title'],
+                    'post_content' => $p['content'],
+                    'post_status'  => 'publish',
+                    'post_type'    => 'page',
+                    'post_name'    => $p['slug']
+                ]);
+            }
+
+            // Guardar en las opciones
+            if (!is_wp_error($page_id) && $page_id) {
+                update_option($p['option'], $page_id);
+            }
+        }
     }
+
 
     public function handle_auth_requests() {
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
